@@ -1,30 +1,38 @@
-# 目录归属（配合分支保护里的 "Require review from Code Owners" 生效）
+# 目录归属声明
 #
-# 用法：把下面的 @stecven 视为「你自己」，把 @<协作者用户名> 换成对方账号。
-# GitHub 只认真实存在的用户名；占位符会被忽略，所以替换前不会误挡。
+# GitHub 只在分支保护里勾了 "Require review from Code Owners" 时才拿这个文件拦人。
+# 生效方式见 CONTRIBUTING.md 第三节。
 #
-#   @stecven              —— 前端线（调用绘图引擎出图）
-#   @<协作者用户名>        —— 素材线（爬取图片、入库、打标签）
+# 两个角色：
+#   前端线（调用绘图引擎出图）—— 你自己  @stecven
+#   素材线（爬图、入库、打标签）—— 协作者
+#
+# >>> TODO：拿到协作者账号后，把标了【换成协作者】的三行的 @stecven 改掉 <<<
+#
+# 注：GitHub 只认真实存在的用户名，写错的用户名那行会被忽略（回落到 * 规则），
+#     所以替换之前不会误挡。替换后再开分支保护里的 Code Owners 审核。
 
-# 默认：所有文件归前端线（也即你自己），两人共同维护的公共目录也在内
-*                       @stecven
+# 默认：所有文件归前端线（你自己）
+*                        @stecven
 
-# ---- 素材线：采集、图片、数据库 ----
-/ingest/                @stecven
-/assets/                @stecven
-/db/                    @stecven
+# ---- 素材线：采集、图片、数据库（这三条改成协作者账号） ----
+/ingest/                 @stecven   # 【换成协作者】采集与入库脚本
+/assets/                 @stecven   # 【换成协作者】入库的图片
+/db/                     @stecven   # 【换成协作者】assets.db 是二进制，单写者
 
 # ---- 前端线：绘图引擎与界面 ----
-/frontend/              @stecven
-/loop/                  @stecven
+/frontend/               @stecven
+/loop/                   @stecven
 
-# ---- 公共：两边都会改，改动请在 PR 里说明 ----
-/tests/                 @stecven
-/docs/                  @stecven
-/.superpowers/          @stecven
-/CONTRIBUTING.md        @stecven
+# ---- 公共：两边都会改，改动请在 PR 描述里写清改了什么 ----
+/tests/                  @stecven
+/docs/                   @stecven
+/.superpowers/           @stecven
 
-# ---- 高危文件：任何改动都必须经过你 ----
-/scripts/migrate_db.py  @stecven
-/.gitignore             @stecven
-/.gitattributes         @stecven
+# ---- 高危文件：任何改动都必须经过你自己 ----
+/CONTRIBUTING.md         @stecven
+/scripts/migrate_db.py   @stecven
+/scripts/register_icons.py @stecven
+/scripts/tag_assets.py   @stecven
+/.gitignore              @stecven
+/.gitattributes          @stecven

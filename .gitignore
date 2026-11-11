@@ -1,0 +1,27 @@
+# ---- 生成物：全部由 scripts/ 下的脚本重建，不进版本库 ----
+out/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 数据库备份：assets.db 是唯一真源，.bak 只是迁移前的快照 ----
+db/*.bak
+db/*.bak-*
+
+# ---- 工具缓存 ----
+.dsh-vision-router/
+.dsh-cache/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+
+# ---- 测试临时目录（mkdtemp 产物，ACL 不可读） ----
+scratch/

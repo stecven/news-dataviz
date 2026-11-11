@@ -1,0 +1,30 @@
+# 目录归属（配合分支保护里的 "Require review from Code Owners" 生效）
+#
+# 用法：把下面的 @stecven 视为「你自己」，把 @<协作者用户名> 换成对方账号。
+# GitHub 只认真实存在的用户名；占位符会被忽略，所以替换前不会误挡。
+#
+#   @stecven              —— 前端线（调用绘图引擎出图）
+#   @<协作者用户名>        —— 素材线（爬取图片、入库、打标签）
+
+# 默认：所有文件归前端线（也即你自己），两人共同维护的公共目录也在内
+*                       @stecven
+
+# ---- 素材线：采集、图片、数据库 ----
+/ingest/                @stecven
+/assets/                @stecven
+/db/                    @stecven
+
+# ---- 前端线：绘图引擎与界面 ----
+/frontend/              @stecven
+/loop/                  @stecven
+
+# ---- 公共：两边都会改，改动请在 PR 里说明 ----
+/tests/                 @stecven
+/docs/                  @stecven
+/.superpowers/          @stecven
+/CONTRIBUTING.md        @stecven
+
+# ---- 高危文件：任何改动都必须经过你 ----
+/scripts/migrate_db.py  @stecven
+/.gitignore             @stecven
+/.gitattributes         @stecven

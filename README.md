@@ -19,13 +19,17 @@
 | 路径 | 内容 |
 |---|---|
 | `loop/` | 核心：`solve`/`scaffold`/`fit`/`frame` 约束求解；`palette`/`text_style`/`thermo_shape` 视觉单一来源；`render*`/`preview` 单卡渲染；`layout`/`text_flow`/`render_page` 整版排版；`selector`/`pipeline`/`compose` 选型与编排；`asset_schema`/`asset_lookup` 素材库语义层 |
+| `frontend/` | **前端出图线**：前端界面与调用层（调绘图引擎出图） |
+| `ingest/` | **素材采集线**：爬取数据图、清洗、登记进素材库、打语义标签 |
 | `scripts/` | 数据入库、素材生成与打标、各阶段演示脚本、数据库迁移 |
 | `tests/` | 676 个 unittest（`python -m unittest discover -s tests`） |
 | `docs/superpowers/specs/` | 设计文档、素材库语义 schema、端到端复盘 |
 | `.superpowers/sdd/` | 实施台账（第 1–30 步的决策与验证记录） |
-| `db/assets.db` | 素材库真源（含语义标签、词表、检索视图） |
+| `db/assets.db` | 素材库真源（含语义标签、词表、检索视图）——**二进制，只由素材线提交** |
 | `assets/` | 原版参考图与图标 |
 | `out/` | **生成物，不入库**，由 `scripts/` 重建 |
+
+两条线怎么分工、数据库为什么只有一个写者、500 张图怎么不撑爆仓库：[CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 快速开始
 

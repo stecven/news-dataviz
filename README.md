@@ -30,6 +30,7 @@
 | `out/` | **生成物，不入库**，由 `scripts/` 重建 |
 
 两条线怎么分工、数据库为什么只有一个写者、500 张图怎么不撑爆仓库：[CONTRIBUTING.md](CONTRIBUTING.md)。
+新协作者从哪开始：[ONBOARDING.md](ONBOARDING.md)（fork 流程 + 入库四步 + 硬规则）。
 
 ## 快速开始
 

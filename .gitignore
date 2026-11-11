@@ -25,3 +25,6 @@ desktop.ini
 
 # ---- 测试临时目录（mkdtemp 产物，ACL 不可读） ----
 scratch/
+
+# ---- 本机 SSH 私钥（仅此机器，绝不入库） ----
+.dev-keys/

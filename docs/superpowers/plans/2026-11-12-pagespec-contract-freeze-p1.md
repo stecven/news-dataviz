@@ -628,7 +628,7 @@ git commit -m "feat(contract): chart 字段 + 严格写出 + 消重构造路径�
     - `wrap_element(el: ElementSpec, scale: float) -> list[str]` — `= text_flow.wrap(el.text, el.role, el.w_in, scale)`。**唯一**调用 `text_flow.wrap` 的地方。
     - `annotate_card_text(spec: PageSpec, scale: float) -> PageSpec` — 返回**新的** `PageSpec`（`dataclasses.replace`），对每个 `type == "text"` 且 `text` 为真、`w_in > 0`、`lines` 为空的元素：`lines = wrap_element(el, scale)`、`font_pt = palette.scaled_font_size(el.role, scale)`。其它元素原样带过。**幂等**：已经带 `lines` 的元素不再重算。
     - `annotate_layout(layout: PageLayoutSpec) -> PageLayoutSpec` — 对 `layout.cards` 逐张用 `palette.spec_scale(card.spec)` 调 `annotate_card_text`。**只动卡片，不动整版 blocks**（整版块的 `lines` 早就写进 `geometry["lines"]` 了，见 `layout.py:967`）。
-  - `loop/layout.py`：`flow_layout()` 里 `PlacedCard(...)`（:814）构造前，把 `spec` 换成 `card_text.annotate_card_text(spec, palette.spec_scale(spec))`。**只加这一处调用**，不改流式排版的任何高度/位置计算。
+  - `loop/layout.py`：`flow_layout()` 里 `PlacedCard(...)`（:894-896；`spec=spec,` 在 `:895`）构造前，把 `spec` 换成 `card_text.annotate_card_text(spec, palette.spec_scale(spec))`。**只加这一处调用**，不改流式排版的任何高度/位置计算。
 
 ```python
 def annotate_card_text(spec: PageSpec, scale: float) -> PageSpec:
@@ -698,7 +698,7 @@ cd /d/appmy/news-dataviz && python -m unittest tests.test_step35_card_text -v
 
 - [ ] **Step 4: 在 `loop/layout.py::flow_layout` 接线**
 
-找到 :814 的 `PlacedCard(card=item, spec=spec, ...)`，把 `spec` 参数改成 `card_text.annotate_card_text(spec, palette.spec_scale(spec))`。`loop/layout.py` 顶部已有 `from loop import palette`（`flatten()` 在用），只需再加 `from loop import card_text`。**确认没有循环导入**：`card_text` 只 import `text_flow` / `palette` / `models`，三者都不 import `layout`。
+找到 `loop/layout.py:894` 的 `PlacedCard(card=item, spec=spec, ...)`（**按内容定位，行号只是当前的**：`grep -n 'placed.append(PlacedCard(' loop/layout.py`），把 `spec` 参数改成 `card_text.annotate_card_text(spec, palette.spec_scale(spec))`。`loop/layout.py` 顶部已有 `from loop import palette`（`flatten()` 在用），只需再加 `from loop import card_text`。**确认没有循环导入**：`card_text` 只 import `text_flow` / `palette` / `models`，三者都不 import `layout`。
 
 - [ ] **Step 5: 跑测试与全量**
 

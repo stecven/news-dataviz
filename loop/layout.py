@@ -270,6 +270,24 @@ class PlacedBlock:
                 "lines": list(self.lines),
                 "line_groups": [list(g) for g in self.line_groups]}
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "PlacedBlock":
+        """``to_dict`` 的左逆：从扁平 dict 重建 ``TextBlock`` + 外盒坐标。
+
+        ``TextBlock.width_in``（预设宽度）不在 ``to_dict`` 里 —— 落位之后它已经
+        被 ``w_in`` 取代，所以读不回来也不丢契约里的任何键。
+        """
+        return cls(
+            block=TextBlock(
+                text=d["text"], style=d.get("style", "body"),
+                align=d.get("align", "left"), name=d.get("name"),
+                column_span=d.get("column_span", 1),
+                columns=d.get("columns", 1)),
+            x_in=d["x_in"], y_in=d["y_in"], w_in=d["w_in"], h_in=d["h_in"],
+            row=d["row"], lines=list(d.get("lines", [])),
+            column_gutter_in=d.get("column_gutter_in", 0.0),
+            line_groups=[list(g) for g in d.get("line_groups", [])])
+
 
 @dataclass
 class PlacedImage:
@@ -299,6 +317,23 @@ class PlacedImage:
                 "semantic": self.block.semantic,
                 "rect": list(self.rect)}
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "PlacedImage":
+        """``to_dict`` 的左逆：从扁平 dict 重建 ``ImageBlock`` + 外盒坐标。
+
+        ``ImageBlock.max_height_in``（高度上限）是**排版输入**，不在
+        ``to_dict`` 里 —— 落位后它已由 ``h_in`` / ``rect`` 表达。
+        """
+        return cls(
+            block=ImageBlock(
+                path=d["path"], style=d.get("style", "icon"),
+                align=d.get("align", "center"), name=d.get("name"),
+                column_span=d.get("column_span", 1),
+                asset_id=d.get("asset_id"), tag=d.get("tag"),
+                semantic=d.get("semantic")),
+            x_in=d["x_in"], y_in=d["y_in"], w_in=d["w_in"], h_in=d["h_in"],
+            row=d["row"], rect=tuple(d.get("rect", (0.0, 0.0, 0.0, 0.0))))
+
 
 @dataclass
 class PlacedCard:
@@ -322,6 +357,22 @@ class PlacedCard:
                 "w_in": self.w_in, "h_in": self.h_in, "row": self.row,
                 "column_span": self.card.column_span,
                 "spec": self.spec.to_dict()}
+
+    @classmethod
+    def from_dict(cls, d: dict, where: str = "$.cards[]",
+                  warnings: list | None = None) -> "PlacedCard":
+        """``to_dict`` 的左逆：重建 ``CardSpec`` 外框 + 内部 ``PageSpec``。
+
+        ``CardSpec`` 的 ``title`` / ``values`` 等排版输入不在 ``to_dict`` 里
+        （它们只用来生成 ``spec``），所以这里只恢复契约记下来的那几个键。
+        """
+        sink = [] if warnings is None else warnings
+        return cls(
+            card=CardSpec(name=d["name"], kind=d["kind"],
+                          column_span=d.get("column_span", 1)),
+            spec=_spec_from_dict(d["spec"], f"{where}.spec", sink),
+            x_in=d["x_in"], y_in=d["y_in"], w_in=d["w_in"], h_in=d["h_in"],
+            row=d["row"])
 
 
 @dataclass
@@ -411,6 +462,11 @@ class PageLayoutSpec:
     rows: list = field(default_factory=list)
     column_count: int = 1
     column_gutter_in: float = 0.2
+    #: 契约版本（1.0 新样本写 ``"1.0"``；0.x 老样本没有这个键 → None）。
+    #: **留在字段末尾**：按位置构造 PageLayoutSpec 的调用方不受影响。
+    version: str | None = None
+    #: 主题（``loop/palette.py::summary()`` 的原样产物；老样本没有 → None）。
+    theme: dict | None = None
 
     def to_dict(self) -> dict:
         return {"width_in": self.width_in, "height_in": self.height_in,
@@ -420,7 +476,31 @@ class PageLayoutSpec:
                 "rows": list(self.rows),
                 "cards": [c.to_dict() for c in self.cards],
                 "blocks": [b.to_dict() for b in self.blocks],
-                "images": [i.to_dict() for i in self.images]}
+                "images": [i.to_dict() for i in self.images],
+                "version": self.version, "theme": self.theme}
+
+    @classmethod
+    def from_dict(cls, d: dict, warnings: list | None = None) -> "PageLayoutSpec":
+        """宽松读回：缺键靠 dataclass 默认值兜底，子项逐个重建。
+
+        ``cards`` 走 ``PlacedCard.from_dict``（它会调 ``_spec_from_dict``）——
+        **不能**把卡片内层丢给 ``PageSpec.from_dict``：那份实现对图元做
+        ``ElementSpec(**e)``，遇到未知键直接 ``TypeError``（``models.py:75``）。
+        ``warnings`` 是**可选**的外置收集器：``load_layout_json`` 把未知图元键的
+        告警收进 ``ReadResult.warnings``；不传时告警就地丢弃。
+        """
+        sink = [] if warnings is None else warnings
+        return cls(
+            width_in=d["width_in"], height_in=d["height_in"],
+            margin_in=d["margin_in"], gutter_in=d["gutter_in"],
+            cards=[PlacedCard.from_dict(c, f"$.cards[{i}]", sink)
+                   for i, c in enumerate(d.get("cards", []))],
+            blocks=[PlacedBlock.from_dict(b) for b in d.get("blocks", [])],
+            images=[PlacedImage.from_dict(i) for i in d.get("images", [])],
+            rows=d.get("rows", []),
+            column_count=d.get("column_count", 1),
+            column_gutter_in=d.get("column_gutter_in", 0.2),
+            version=d.get("version"), theme=d.get("theme"))
 
     def card(self, name: str) -> PlacedCard:
         for c in self.cards:
@@ -917,3 +997,50 @@ def flatten(page: PageLayoutSpec) -> PageSpec:
 
 def page_spec_path(out_dir: str) -> str:
     return os.path.join(out_dir, "pagelayout.json")
+
+
+# ---------------------------------------------------------------------------
+# 读回（宽松）：pagelayout.json → dataclass
+# ---------------------------------------------------------------------------
+#: ``_element_from_dict`` 认得的图元键。照 ``ElementSpec`` 的字段逐个列出，
+#: 故意**不**用 ``dataclasses.fields()``：未来新增的字段必须先在这里登记才会
+#: 被读进来，否则降级成 warning —— 静默吃掉未来字段比报一声更糟。
+ELEMENT_KEYS = ("id", "type", "role", "x_in", "y_in", "w_in", "h_in",
+                "fill", "text", "binding", "geometry_expr", "geometry",
+                "image_path", "lines", "font_pt", "editable")
+
+
+def _element_from_dict(d: dict, where: str, warnings: list) -> ElementSpec:
+    """显式挑已知键构造 ``ElementSpec``；未知键降级成 warning。
+
+    ``ElementSpec(**d)``（``loop/models.py:75`` 的写法）遇到未来字段会
+    ``TypeError``；读入口的口径是「老文档、未来文档都要能读」，所以这里挑键、
+    记一条 ``f"{where}: 忽略未知键 {key!r}"``，不抛。
+    """
+    known = {key: d[key] for key in ELEMENT_KEYS if key in d}
+    for key in d:
+        if key not in ELEMENT_KEYS:
+            warnings.append(f"{where}: 忽略未知键 {key!r}")
+    return ElementSpec(**known)
+
+
+def _spec_from_dict(d: dict, where: str, warnings: list) -> PageSpec:
+    """``PageSpec.from_dict`` 的宽松版：``elements`` 走 ``_element_from_dict``。
+
+    其余键的口径与 ``loop/models.py::PageSpec.from_dict`` 逐字一致（硬取那 5
+    个结构必填键，其余 ``.get`` 兜底）—— 两处必须同步。
+    """
+    return PageSpec(
+        width_in=d["width_in"],
+        height_in=d["height_in"],
+        chart_key=d["chart_key"],
+        chart_title=d["chart_title"],
+        scale=Scale(**d["scale"]),
+        elements=[_element_from_dict(e, f"{where}.elements[{i}]", warnings)
+                  for i, e in enumerate(d.get("elements", []))],
+        semantic_tags=d.get("semantic_tags", []),
+        constraints=d.get("constraints", []),
+        layout=d.get("layout", {}),
+        content_bbox=d.get("content_bbox"),
+        frame_bbox=d.get("frame_bbox"),
+    )

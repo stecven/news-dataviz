@@ -40,6 +40,13 @@ class ElementSpec:
     # 图片载的是文件位置，混用会让「数据链接」校验器误判图片有数据绑定。
     # 缺省 None，保证改版前的 pagespec.json 仍能 from_dict 读回。
     image_path: str | None = None
+    # 1.0 契约新增（Spec §5.6 / D10）：契约里的折行结果、实际字号、可否单独
+    # 选中。三者都由渲染前的求解填，读老样本时为 None——缺省 None 保证改版前
+    # 的 pagespec.json / pagelayout.json 仍能读回。**必须留在末尾**：
+    # loop/layout.py::flatten 等处按位置构造 ElementSpec 的代码不受影响。
+    lines: list | None = None
+    font_pt: float | None = None
+    editable: bool | None = None
 
 
 @dataclass

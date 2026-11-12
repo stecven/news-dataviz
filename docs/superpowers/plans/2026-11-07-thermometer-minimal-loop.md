@@ -18,7 +18,7 @@
 - **数据库只读**：一律 `sqlite3.connect("file:<path>?mode=ro", uri=True)`；「不改 `db/assets.db`、不爬虫、不做整版排版」；验收时比对运行前后 SHA-256。
 - **不许做的事**：不修改 `scripts/` 下任何现有脚本、不改 `README.md`、不建 `asset_tags` 等新表、不调用 LLM、不实现整版排版、不引入新依赖、不 `git init`。
 - **新代码边界**：只允许新建 `loop/` 包与 `tests/`；产物只写 `out/loop1/` 与 `out/loop1_override/`。
-- **运行环境**：工作目录 `C:\Users\29642\Aurabot\news-dataviz`；每条 Python 命令前先设 `$env:PYTHONIOENCODING='utf-8'`（中文标签与输出）；PowerShell 不支持 heredoc，**先写文件再跑**，不用 `- <<'EOF'`。测试统一 `python -m unittest discover -s tests -t . -v`。
+- **运行环境**：工作目录 `D:\appmy\news-dataviz`；每条 Python 命令前先设 `$env:PYTHONIOENCODING='utf-8'`（中文标签与输出）；PowerShell 不支持 heredoc，**先写文件再跑**，不用 `- <<'EOF'`。测试统一 `python -m unittest discover -s tests -t . -v`。
 - **无 git 仓库**：已核实 `git status` 返回 `fatal: not a git repository (or any of the parent directories): .git`。本计划**不产生 commit 步骤**，每个 Task 以「该 Task 全部测试 `-v` 全绿」作为 gate。
 - **验收三条**（用户指定，逐条可测）：① 图形形状是温度计（5 组「管身 + 液柱 + 球泡」，液柱为 `AUTO_SHAPE` 而非 `PICTURE`）；② 长度严格等于数值，`v=10.0` 的液柱 `≈ 3.0×10/11 = 2.727 in` 且 `< 3.0 in`，改 `seq=1` 为 `12.0` 后 `V_max=14.0` 且全组重算；③ 规格可改数据后重绘（`pagespec.json` 往返等价、第二份 PPTX 液柱 EMU 变化且比例正确）。
 - **Spec 覆盖范围**：Spec A 的 `DataBrief` / `GoalExplorer` / `StyleComposer` / `LayoutComposer` / `Evaluator` 与 B 节其余 5 类脚手架**不在本计划**；本计划只落 Spec §0.1 的最小闭环，其中 `load_points()` 是 `DataBrief` 的只读最小替身、`GOAL_STUB` 是 `GoalExplorer` 的固定 stub 替身。C/D/E 节的提示词、自评估、素材标注留到 Spec §0.3。

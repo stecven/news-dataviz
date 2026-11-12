@@ -814,6 +814,16 @@ git commit -m "test(contract): V5 宽松读/严格写与 V6 主题单一来源�
 
 接上它**不改变任何几何数字**（`dump_layout` = `to_dict()` + 补两键 + 过 schema），实测给 11 份样本塞这两键后指纹 `changed 0 / 11`。但 `scripts/` 在 `.github/CODEOWNERS` 里被钉给 @stecven、且 CONTRIBUTING §六写明"出图入口只有 `compose_page` 等几个"，所以**只改已存在的落盘行、不新增入口、不动其它逻辑**，并在 PR 描述里写清理由。
 
+**关于 Task 1 的几何基线已在本次重定（T7-B，2026-11-12 实测后的裁决，动工前必读）**
+
+Task 1 冻结的 `tests/fixtures/contract/legacy_fingerprints.json` 原本钉的是 `out/demo/**` 里**当时已有的文件**。实测发现那 11 份产物的 mtime 全是 `2026-11-11 12:46`，而 `loop/layout.py` 之后在 `99fc931`（2026-11-11 16:48）与 P1 的四个提交里都改过——**它们是比当前代码更早的陈旧产物**。因此在干净 main（`f74cc2e`）的 worktree 上重跑 `build_auto_layout_demo` 也照样对不上原基线（`pristine-main regen == baseline? False`），与本计划的任何改动无关。
+
+已做的处置：基线重定为「**当前 main 代码（`f74cc2e`）重生成的 11 份产物指纹**」，11 条里 **7 条 sha 变化**（`auto_layout`、`auto_layout/_plain`、`illustrated/_no_asset`、`multicol`、`multicol/_spread`、`page`、`paper`），其余 4 条不变。重定后 `tests.test_step31_contract_fixtures` 5 条全绿。
+
+证据（实测，可复现）：分支上把六个脚本全跑一遍后，逐份几何与 main worktree 重生成的产物对比 **0 of 11 不同**；连跑两遍 sha 完全一致；把 `version`/`theme`/`lines`/`font_pt`/`editable` 全塞进 11 份产物后指纹 `changed 0 / 11`。→ **P1 的七次提交对几何零影响，本 Task 的"几何不变"判据因此等价于"分支产物 == main 产物"。**
+
+**你在 Step 4 看到这条红时不许重写基线**：它现在只会在真的碰了 `loop/layout.py` / `loop/models.py` 的几何计算时才红。
+
 - [ ] **Step 0: 把落盘路径接到契约写出**
 
 `loop/compose.py` 里找到（**按内容定位**：`grep -n 'json.dump(page.to_dict()' loop/compose.py`）：
@@ -833,7 +843,7 @@ git commit -m "test(contract): V5 宽松读/严格写与 V6 主题单一来源�
 
 四个 `scripts/build_*_demo.py` 里同样形态的那三行 `with open(...) / json.dump(page.to_dict(), ...)` 换成 `write_layout_atomic(<同一路径>, dump_layout(page))`，import 同上。**逐文件只改这一处，不许顺手改别的。**
 
-改完先跑一次全量，确认 **714 仍全绿**（此步不该改变任何测试结果，`tests/test_step26_auto_compose.py` / `test_step27_multicol.py` / `test_step30_theme_match.py` 读的是产物路径而非字节）：
+改完先跑一次全量，确认 **719 仍全绿**（此步不该改变任何测试结果，`tests/test_step26_auto_compose.py` / `test_step27_multicol.py` / `test_step30_theme_match.py` 读的是产物路径而非字节）：
 
 ```bash
 cd /d/appmy/news-dataviz && python -m unittest discover -s tests -t . -q

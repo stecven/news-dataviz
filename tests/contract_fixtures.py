@@ -19,6 +19,7 @@ Task 3/4/5 都要碰 ``loop/``，一旦代码改了 ``out/demo/**/pagelayout.jso
 import hashlib
 import json
 import os
+import re
 
 #: 仓库根绝对路径（本文件在 ``<root>/tests/`` 下，上溯两级）。
 REPO_ROOT: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -100,6 +101,63 @@ def load_baseline() -> dict:
     """读 ``legacy_fingerprints.json``：``{相对路径: {"sha256": ...}}``。"""
     with open(BASELINE_PATH, encoding="utf-8") as fh:
         return json.load(fh)
+
+
+#: 前端 JS 源码根目录（P2 才建；现在不存在，所以扫描器返回空列表）。
+FRONTEND_SRC: str = os.path.join(REPO_ROOT, "frontend", "src")
+
+#: 十六进制色值：``#rgb`` / ``#rrggbb`` / ``#rrggbbaa``，大小写都算。
+#:
+#: **必须**长前短后（8 → 6 → 3）：短的先匹配会把 ``#00ff0080`` 截成 ``#00f``。
+#: ``(?![0-9a-zA-Z_-])`` 排除紧跟字母数字下划线连字符的 ``#``，否则
+#: ``url(#faded)`` / ``href="#fragment-1"`` 这类 SVG 片段引用会被当成色值
+#: （假阳性逼着守卫加白名单，很快形同虚设）。
+#: 注释里的 ``#fff`` 仍算命中 —— **有意保守**，注释里写色值一样是写死。
+HEX_COLOR_RE = re.compile(
+    r"#(?:(?:[0-9a-fA-F]{8})|(?:[0-9a-fA-F]{6})|(?:[0-9a-fA-F]{3}))"
+    r"(?![0-9a-zA-Z_-])")
+
+#: 写死字号，两支并列：
+#:
+#: 1. ``font-size:`` / ``fontSize=`` 后面跟数字（``style.fontSize = 14``）；
+#: 2. 引号**紧跟**数字，数字后接 ``px`` / ``pt``（``ctx.font = "12px sans"``）。
+#:
+#: 第 2 支**不能**写成 ``["']\d+(px|pt)["']``（数字前后都要求闭合引号）：
+#: 真实写法是 ``"12px sans"``，数字后面还有字体名，那样写对真实代码 0 命中。
+#: ``theme.fontSizes.label`` 不命中（``fontSize`` 后面跟的是 ``s``，不是 ``:`` / ``=``）。
+FONT_SIZE_RE = re.compile(
+    r"""(?:font-size|fontSize)\s*[:=]\s*["']?\d|["']\d+(?:px|pt)\b""")
+
+
+def iter_js_sources() -> list[str]:
+    """``frontend/src/**/*.js`` 的仓库根相对路径，``/`` 分隔，排序后返回。
+
+    ``frontend/src`` 不存在（P1 阶段就是这样）时返回 ``[]``，不抛。
+    """
+    if not os.path.isdir(FRONTEND_SRC):
+        return []
+    found = []
+    for dirpath, _dirnames, filenames in os.walk(FRONTEND_SRC):
+        for name in filenames:
+            if name.endswith(".js"):
+                full = os.path.join(dirpath, name)
+                found.append(os.path.relpath(full, REPO_ROOT).replace(os.sep, "/"))
+    return sorted(found)
+
+
+def find_hardcoded_theme_tokens(source: str) -> list[tuple[int, str]]:
+    """扫一段 JS 源码里的写死色值 / 字号：``[(行号, 匹配文本), ...]``。
+
+    行号从 1 开始，同一行内的命中按列序排列。命中的是「从 ``#``（或
+    ``font-size`` / 数字前的引号）开始的文本」，用来在失败信息里指给出处。
+    """
+    hits: list[tuple[int, str]] = []
+    for lineno, line in enumerate(source.splitlines(), start=1):
+        found = [(m.start(), m.group(0)) for m in HEX_COLOR_RE.finditer(line)]
+        found += [(m.start(), m.group(0)) for m in FONT_SIZE_RE.finditer(line)]
+        for _col, text in sorted(found, key=lambda item: item[0]):
+            hits.append((lineno, text))
+    return hits
 
 
 def _write_baseline() -> int:

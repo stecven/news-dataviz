@@ -27,6 +27,38 @@ python scripts/build_multicol_demo.py       # 2 栏排版 + 卡片跨栏
 python scripts/build_illustrated_demo.py    # 图文并茂 + 跳过验证
 ```
 
+## 契约：`pagelayout.json` 与 `theme`
+
+整版版面的数据契约冻结在 **`frontend/schema/pagelayout.schema.json`**（版本 `1.0`）。
+Python 侧的读入口是 `loop/contract.py::load_layout`（**宽松**：0.x 老文档缺
+`version` / `theme` / `images` 照样读得进来，缺什么降级成 `warnings`，不抛），
+写入口是 `loop/contract.py::dump_layout`（**严格**：补齐 `version` / `theme` 后过
+schema，不合规抛 `ContractError`）。
+
+**颜色与字号只能从图纸的 `theme` 取。** `theme` 是 `loop/palette.py::summary()`
+的原样产物（色板、字号层级、扇区顺序、画布基准、`role_to_font` 全在里面），
+它随每份 `pagelayout.json` 一起发出去，所以 JS 渲染库不需要自己带一份色板。
+
+因此 `frontend/src/` 里**禁止**出现：
+
+- 十六进制色值字面量（`#rgb` / `#rrggbb` / `#rrggbbaa`，大小写都算）；
+- 写死的字号（`font-size: 12`、`fontSize = 14`、`"12px"` / `"9pt"` 这类字面量）。
+
+正确写法是从 `theme` 里按角色取：
+
+```js
+const c = theme.palette.primary;      // 而不是 "#C01F2A"
+const pt = theme.font_sizes.title;    // 而不是 20
+```
+
+**唯一例外是 `frontend/src/theme.js`** —— 它就是读取层（把 `theme` 解析成
+一组访问器的那一层），色值字面量天然归它管。
+
+守这条规则的是 `tests/test_step36_contract_guards.py`
+（`tests/contract_fixtures.py::find_hardcoded_theme_tokens` 提供扫描器）：
+扫 `frontend/src/**/*.js`，放过 `theme.js`，其余有命中就报出文件与行号。
+P1 阶段还没有 `frontend/src/`，那条用例会 skip —— 守卫先落地，等 P2 建了目录自动生效。
+
 ## 铁律
 
 1. **颜色与字号只有一个来源**：`loop/palette.py`。渲染层出现十六进制色值或 `Pt(10)` 会被测试判红。

@@ -5,7 +5,11 @@
 * 写出时补齐 ``version`` / ``theme``（theme = ``palette.summary()`` 原样）
                                             → ``test_dump_layout_fills_version_and_theme``
 * 写出的文档必须过严格 schema（schema ↔ dataclass 不漂移）→
-  ``test_dump_layout_output_passes_strict_schema``（Review Focus #5）
+  ``test_dump_layout_output_passes_strict_schema``（Review Focus #5；两份老夹具
+  + ``out/demo/**`` 历史样本）
+* 1.0 新字段的**真实载荷**（dict 形态 ``chart``、非空 ``lines``）也过严格 schema，
+  并用两条 schema 变异做负向对照                        →
+  ``test_dump_layout_accepts_full_1_0_payload``
 * 校验失败抛 ``ContractError``，消息里带错误路径        →
   ``test_dump_layout_raises_contract_error_with_element_path``
 * 原子写失败不留 ``.tmp``、不动目标字节                  →
@@ -30,12 +34,12 @@ import unittest
 from dataclasses import fields
 
 from loop.contract import (ContractError, _spec_from_dict, dump_layout,
-                           load_layout, write_layout_atomic)
+                           load_layout, load_layout_json, write_layout_atomic)
 from loop.layout import PageLayoutSpec
 from loop.models import ElementSpec, PageSpec
 from loop.palette import summary as palette_summary
-from loop.schema_check import validate_doc
-from tests.contract_fixtures import LEGACY_DIR
+from loop.schema_check import load_schema, validate_doc
+from tests.contract_fixtures import LEGACY_DIR, REPO_ROOT, demo_layout_paths
 
 #: 两份入库夹具（``out/`` 不入库，它们才是长期可复现的证据）。
 AUTO_LAYOUT_FIXTURE = "auto_layout.pagelayout.json"
@@ -68,6 +72,48 @@ class TestContractWriteEntry(unittest.TestCase):
         for fixture in (PLAIN_FIXTURE, AUTO_LAYOUT_FIXTURE):
             with self.subTest(fixture=fixture):
                 self.assertEqual(validate_doc(dump_layout(_layout(fixture))), [])
+        # 顺手把网撒宽：``out/demo/**`` 的历史样本（fresh clone 上是空列表，
+        # 照样跑）。它们的 dump 里同样可能有非空 1.0 载荷。
+        for rel in demo_layout_paths():
+            with self.subTest(demo=rel):
+                layout = load_layout(os.path.join(REPO_ROOT, rel)).layout
+                self.assertEqual(validate_doc(dump_layout(layout)), [])
+
+    def test_dump_layout_accepts_full_1_0_payload(self):
+        # 两份老夹具的 dump 里既没有非空 ``lines``、也没有 dict 形态的 ``chart``，
+        # 所以「过严格 schema」只钉得住「字段没了 / 改名了 / 不接受 None」，
+        # 钉不住 1.0 新字段的**真实载荷形状**：把 schema 里这俩改成 string，
+        # 旧判据照样全绿（见报告 §P2 的探针）。这里把真载荷灌进去。
+        doc = _load(AUTO_LAYOUT_FIXTURE)
+        doc["cards"][0]["spec"]["chart"] = {"kind": "thermometer", "unit": "%"}
+        element = doc["cards"][0]["spec"]["elements"][0]
+        element["lines"] = ["第一行", "第二行"]
+        element["font_pt"] = 12.0
+        element["editable"] = True
+
+        out = dump_layout(load_layout_json(doc).layout)
+
+        # 正向：真载荷必须过。
+        self.assertEqual(validate_doc(out), [])
+
+        # 负向对照（必须，否则上面那条是可空过的）：只改内存里这一份 schema，
+        # 校验器必须报错——证明它**真的在看**这两个字段的形状。
+        # ``load_schema()`` 每次都重新读文件，所以改它不会污染别的用例。
+        chart_mut = load_schema()
+        chart_mut["$defs"]["page"]["properties"]["chart"] = {
+            "type": ["string", "null"]}
+        chart_errors = validate_doc(out, schema=chart_mut)
+        self.assertTrue(chart_errors, "schema 的 chart 改成 string 后仍全绿：钉不住 chart 载荷")
+        self.assertIn("$.cards[0].spec.chart",
+                      [e["path"] for e in chart_errors])
+
+        lines_mut = load_schema()
+        lines_mut["$defs"]["element"]["properties"]["lines"] = {
+            "type": ["string", "null"]}
+        lines_errors = validate_doc(out, schema=lines_mut)
+        self.assertTrue(lines_errors, "schema 的 lines 改成 string 后仍全绿：钉不住 lines 载荷")
+        self.assertIn("$.cards[0].spec.elements[0].lines",
+                      [e["path"] for e in lines_errors])
 
     def test_dump_layout_raises_contract_error_with_element_path(self):
         layout = _layout(AUTO_LAYOUT_FIXTURE)

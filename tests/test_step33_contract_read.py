@@ -7,7 +7,8 @@
 * ``from_dict`` 是 ``to_dict`` 的左逆（不丢键、幂等）           → ``test_roundtrip_superset_and_idempotent``
 * 1.0 新增可空键在输出里存在且为 ``None``                       → ``test_new_nullable_keys_present_with_none``
 * 未知图元键降级成 warning，不抛 ``TypeError``                  → ``test_unknown_element_key_becomes_warning_not_crash``
-* 读回**不**做页面级平移、不重新取整                            → ``test_geometry_is_not_translated_on_read``
+* 读回**不**做页面级平移（两份夹具、夹具无关）                  → ``test_geometry_is_not_translated_on_read``
+* 约束 C2：卡片内元素坐标相对卡片左上角（仅 auto_layout）        → ``test_card_element_coordinates_stay_relative_to_card``
 
 夹具路径一律取自 ``tests.contract_fixtures.LEGACY_DIR``，不硬编码目录。
 """
@@ -100,7 +101,28 @@ class TestContractReadEntry(unittest.TestCase):
                       result.warnings, result.warnings)
 
     def test_geometry_is_not_translated_on_read(self):
+        # **夹具无关**：只断言**页面级**元素（卡片 / 整版块 / 插图）的最小 x 落在
+        # 该文档自己的页边距上——「读回没有把整版平移」。两份夹具一起遍历，这样
+        # 断言的成立与否不再取决于夹具里有没有卡片（``_plain`` 一张卡片也没有）。
+        # 卡片内元素的坐标是**相对**卡片左上角的（约束 C2），是另一种性质，见
+        # ``test_card_element_coordinates_stay_relative_to_card``。
+        for fixture in (PLAIN_FIXTURE, AUTO_LAYOUT_FIXTURE):
+            with self.subTest(fixture=fixture):
+                layout = load_layout(os.path.join(LEGACY_DIR, fixture)).layout
+                page_xs = [c.x_in for c in layout.cards]
+                page_xs += [b.x_in for b in layout.blocks]
+                page_xs += [i.x_in for i in layout.images]
+                self.assertTrue(page_xs, f"{fixture} 没有页面级元素，这条会空过")
+                self.assertEqual(min(page_xs), layout.margin_in,
+                                 "页面级最小 x 不是页边距，说明读回时动了几何")
+
+    def test_card_element_coordinates_stay_relative_to_card(self):
+        # 约束 C2：卡片内元素的坐标**相对**卡片左上角，所以最小 x 是相对原点
+        # 0.0；连同卡片自身的落位（页边距 0.4）一起钉住。这条只对 auto_layout
+        # 成立，所以开头先挡住「空夹具静默通过」。
         layout = load_layout(os.path.join(LEGACY_DIR, AUTO_LAYOUT_FIXTURE)).layout
+        self.assertTrue(layout.cards, "这条断言只在有卡片的夹具上有意义")
+
         card = layout.card("heat_ratio_top5")
         self.assertEqual(card.x_in, 0.4)
         self.assertEqual(card.y_in, 2.3875)
@@ -109,20 +131,7 @@ class TestContractReadEntry(unittest.TestCase):
         self.assertEqual(frames[0].x_in, 0.0)
         self.assertEqual(frames[0].y_in, 0.0)
 
-        # 两条诚实的 C2 断言：页面级元素（卡片 / 整版块 / 插图）的最小 x 落在
-        # 页边距 0.4 上——读回没有把整版平移到左边距；卡片内元素的坐标是
-        # **相对**卡片左上角的（约束 C2），所以全部元素的最小 x 是卡片内的
-        # 相对原点 0.0。
-        page_xs = [c.x_in for c in layout.cards]
-        page_xs += [b.x_in for b in layout.blocks]
-        page_xs += [i.x_in for i in layout.images]
-        self.assertEqual(min(page_xs), 0.4,
-                         "页面级最小 x 不是页边距，说明读回时动了几何")
-
-        all_xs = list(page_xs)
-        for c in layout.cards:
-            all_xs += [e.x_in for e in c.spec.elements]
-        self.assertEqual(min(all_xs), 0.0,
+        self.assertEqual(min(e.x_in for e in card.spec.elements), 0.0,
                          "卡片内元素相对坐标原点不是 0.0，说明读回时动了几何")
 
 

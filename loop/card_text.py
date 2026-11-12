@@ -59,6 +59,11 @@ def annotate_card_text(spec: PageSpec, scale: float) -> PageSpec:
 def annotate_layout(layout: PageLayoutSpec) -> PageLayoutSpec:
     """对整版里每张卡片各自标注；整版文本块**不动**。
 
+    生产路径当前**不经过这里**：``flow_layout`` 在放每张卡片时逐张调用
+    ``annotate_card_text``（``loop/layout.py`` 的 ``PlacedCard(...)`` 处），
+    所以本函数没有生产调用者，供**离线重标注 / 前端工具链**使用
+    （对一份已经排好的 ``PageLayoutSpec`` 补 ``lines`` / ``font_pt``）。
+
     每张卡片用自己的缩放比（``palette.spec_scale(card.spec)``）——同一份报纸里
     大卡片小卡片字号不同，折行宽度也随之不同，共用一个缩放比会把行折错。
 

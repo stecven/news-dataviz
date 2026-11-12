@@ -113,6 +113,13 @@ class TestCardTextWrap(unittest.TestCase):
         # Review Focus #3 / Spec §4 D10 的判据。**一条不等就停下报告**，
         # 不许反过来去改 preview.py / text_flow.py 把两边「统一」
         # ——那代表「两条折行实现同口径」这个前提不成立，得用户拍板。
+        #
+        # 口径边界（评审补丁 C）：等价性只在**无结尾空段落**的输入上成立。
+        # ``preview._draw_text`` 结尾是 ``if cur: lines.append(cur)``
+        # （``loop/preview.py:158``），会丢掉落尾空行：``"a\n"`` 在排版层是
+        # ``["a", ""]``、在预览是 ``["a"]``。真换行本身（``"\n"``，len 1 的
+        # 字符，不是反斜杠+n）两边一致。结尾空段落要不要统一属用户拍板，
+        # 不在本 Task 范围；**不许**改 ``preview.py``（R14）。
         checked = cards_seen = longest = 0
         for fixture in FIXTURES:
             layout = _fixture_layout(fixture)
@@ -122,6 +129,10 @@ class TestCardTextWrap(unittest.TestCase):
                 mine = card_text.wrap_element(el, scale)
                 longest = max(longest, len(mine))
                 theirs = _preview_lines(el, scale)
+                # 逐字折行不该丢字：把行拼回去必须等于原文去掉真换行
+                # （``\n`` 是段落分隔，折行只在段落内部发生）。
+                self.assertEqual("".join(mine), (el.text or "").replace("\n", ""),
+                                 f"{fixture} / {card.name} / {el.id}: 折行丢了字")
                 if mine[:4] != theirs:
                     self.fail(
                         f"{fixture} / 卡片 {card.name} / 元素 {el.id} "
@@ -140,6 +151,9 @@ class TestCardTextWrap(unittest.TestCase):
             mine = card_text.wrap_element(el, scale)
             theirs = _preview_lines(el, scale)
             synthetic_longest = max(synthetic_longest, len(mine))
+            # 同上：第 5 行起也必须是真内容，拼回去不许丢字（钉住「:4 之后塞垃圾」）。
+            self.assertEqual("".join(mine), (el.text or "").replace("\n", ""),
+                             f"合成样本 {el.id}: 折行丢了字")
             if mine[:4] != theirs:
                 self.fail(
                     f"合成样本 {el.id} (role={el.role}, w_in={el.w_in}): "
@@ -150,10 +164,14 @@ class TestCardTextWrap(unittest.TestCase):
                            "合成长文本没折出 4 行以上，这条对撞没有意义")
 
     def test_lines_are_not_truncated_to_four(self):
-        # 本样本集（两份夹具）实测最长折行 **1** 行，没有任何超过 4 行的元素，
-        # 所以只能断言「全量等值」而不能断言 ``len(lines) > 4``。
         # 4 行是 ``preview._draw_text`` 的**渲染裁切**（``lines[:4]``），
         # 不该出现在契约里——契约存的是折行全量。
+        #
+        # 只比夹具是不够的（评审实测）：夹具最长折行只有 **1** 行，把
+        # ``lines`` 截到 1/2/3/4/5 行都抓不到。所以夹具那圈继续作为
+        # 「真实数据也全量」的锚，另外再用 ``_synthetic_text_elements()``
+        # （本文件现成的、会折成 4 行以上的样本，非捏造夹具数据）跑一圈，
+        # 并断言**确实折出 4 行以上**——不然这条对撞没有意义。
         checked = longest = 0
         for fixture in FIXTURES:
             layout = _fixture_layout(fixture)
@@ -164,9 +182,17 @@ class TestCardTextWrap(unittest.TestCase):
                 self.assertEqual(el.lines, card_text.wrap_element(el, scale),
                                  f"{fixture} / {card.name} / {el.id}: "
                                  f"契约里的 lines 不是全量折行")
+                self.assertEqual("".join(el.lines), (el.text or "").replace("\n", ""),
+                                 f"{fixture} / {card.name} / {el.id}: "
+                                 f"契约里的 lines 丢了字（第 5 行起也得是真内容）")
         self.assertGreater(checked, 0, "两份夹具里一个卡片文本元素都没有")
-        self.assertLessEqual(longest, 4, "样本集变了：出现超过 4 行的元素，"
-                                         "应改成断言 len(lines) > 4")
+
+        for el, scale in _synthetic_text_elements():
+            got = card_text.annotate_card_text(_spec([el]), scale).elements[0].lines
+            longest = max(longest, len(got))
+            self.assertEqual(got, card_text.wrap_element(el, scale), el.id)
+            self.assertEqual("".join(got), (el.text or "").replace("\n", ""), el.id)
+        self.assertGreater(longest, 4, "样本没折出 4 行以上，这条对撞没有意义")
 
     def test_font_pt_equals_palette_scaled_font_size(self):
         # 基础字号先钉住：role → FONT_SIZES 经 ROLE_TO_FONT。

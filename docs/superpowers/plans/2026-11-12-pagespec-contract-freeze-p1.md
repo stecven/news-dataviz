@@ -19,7 +19,7 @@ Spec §9 定了七个阶段：P1 契约冻结 · P2 只读渲染 · P3 编辑 ·
 1. **P1 是接口，P2 之后都是它的消费者。** 契约定死之前写渲染器，等于用一份还会变的格式写代码；定死之后，每一份后续计划都能拿 `tests/fixtures/contract/` 里的真实夹具对拍，返工最少。
 2. **P1 是唯一一处动 `loop/` 的阶段。** `CONTRIBUTING.md` 要求「一个 PR 只做一件事」，而 P1 之外的阶段只新增 `frontend/` 文件、不碰引擎，回报率更高——把它们和 P1 混在一个 PR 里会让评审看不出哪一处动了引擎。
 
-**P1 结束时应该发生的事**：契约文件存在且被两侧校验；`pagelayout.json` 带 `version: "1.0"` 和自包含的 `theme`；卡片内每个文本元素带 `lines` / `font_pt`；Python 能把图纸读回成对象；11 份历史样本的几何数字**一个字节没变**；`python -m unittest discover -s tests -t . -q` 从 676 涨到 718 全绿。
+**P1 结束时应该发生的事**：契约文件存在且被两侧校验；`pagelayout.json` 带 `version: "1.0"` 和自包含的 `theme`；卡片内每个文本元素带 `lines` / `font_pt`；Python 能把图纸读回成对象；11 份历史样本的几何数字**一个字节没变**；`python -m unittest discover -s tests -t . -q` 从 676 涨到 720 全绿。
 
 ## Global Constraints
 
@@ -32,7 +32,7 @@ Spec §9 定了七个阶段：P1 契约冻结 · P2 只读渲染 · P3 编辑 ·
 - **目录所有权**（Spec §3 C6）：本计划只许改 `loop/`、`tests/`，只许新建 `frontend/schema/` 与 `frontend/README.md` 的一节。**不许碰** `ingest/`、`assets/`、`db/`、`scripts/`（含新增文件）、`CONTRIBUTING.md`、`.gitignore`、`.gitattributes`、`.github/`。
 - **产物只写 `out/`（已 gitignore）与 `tests/fixtures/`。** 不许提交 `out/`、`db/*.bak*`、`.dev-keys/`、`scratch/`。
 - **git 纪律**：分支 `frontend/pagespec-contract`（已存在，含设计文档提交 `1797572`）。`main` 已加保护、只能经 Pull Request 合入；本机**没有 `gh` CLI**，PR 需用户自己在网页开：https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 。本计划**继续用这个分支**（理由与风险见下方「已知偏差」）。
-- **验收标准映射**：本计划覆盖 Spec §7 的 **V4**（676→718 全绿，每个 Task）、**V5**（Task 6）、**V6**（Task 6）。**V1 / V2 / V3 不在本计划**——它们要等 P2 有 JS 渲染器才能跑。
+- **验收标准映射**：本计划覆盖 Spec §7 的 **V4**（676→720 全绿，每个 Task）、**V5**（Task 6）、**V6**（Task 6）。**V1 / V2 / V3 不在本计划**——它们要等 P2 有 JS 渲染器才能跑。
 
 ### 已知偏差（执行者须知，不要"顺手修正"）
 
@@ -492,19 +492,26 @@ git commit -m "feat(contract): pagelayout.json 读回入口 + 四个 from_dict�
 
 ### Task 4: 主题与图表字段 + 严格写出
 
+> **控制器更正（Task 3 之后的 2026-11-12）**：本节有三处已被 Task 3 提前做掉或需要追加，改写如下。**Task 3 已落地的部分不要重做**。
+> - `ElementSpec` 的 `lines`/`font_pt`/`editable` 已在 `loop/models.py:47-49`（Task 3 落地）。**不要再加第二遍。**
+> - `PageLayoutSpec` 的 `version`/`theme` 字段与 `to_dict()` 的两个键已在 `loop/layout.py:467,469,480`（Task 3 落地）。**不要再改 `to_dict()`。**
+> - 本 Task 追加两件事：① 修 `test_geometry_is_not_translated_on_read` 末句（结论对、理由错、且在 `_plain` 夹具下会红）；② 收紧 `$defs.scale` 的 `required` 与 schema 顶层过时的 description（Task 2 评审遗留的 Minor 1 / Minor 2）。
+
 **Files:**
-- Modify: `loop/models.py`
-- Modify: `loop/layout.py`
+- Modify: `loop/models.py`（只加 `chart`）
+- Modify: `loop/layout.py`（只消重 `_spec_from_dict`）
 - Modify: `loop/contract.py`
+- Modify: `frontend/schema/pagelayout.schema.json`（控制器追加，见 Step 5）
+- Modify: `tests/test_step33_contract_read.py`（控制器追加，见 Step 4b）
 - Test: `tests/test_step34_contract_write.py`
 
 **Interfaces:**
 - Consumes: `loop.palette.summary()`（`palette.py:283`）、`loop.schema_check.validate_doc`
 - Produces:
   - `loop/models.py`：
-    - `ElementSpec` **末尾**加 `lines: list | None = None`、`font_pt: float | None = None`、`editable: bool | None = None`
     - `PageSpec` **末尾**加 `chart: dict | None = None`，并在 `PageSpec.from_dict` 里加 `chart=d.get("chart")`
-  - `loop/layout.py`：`PageLayoutSpec.to_dict()` 补 `"version": self.version`、`"theme": self.theme`；`PageLayoutSpec` 字段顺序变为 `..., images, version, theme`（**两个新键必须在末尾**，老 plan 里 `cards` / `rows` 等按位置的构造不受影响）
+    - `PageSpec.from_dict(cls, d, element_factory=ElementSpec)` —— 新增可选注入口，默认值保证既有调用方行为不变
+  - `loop/layout.py`：`_spec_from_dict`（`:1027`）退化成 `PageSpec.from_dict` 的一层包装（传 `element_factory=lambda e: _element_from_dict(e, where, warnings)`），**不再是 11 键构造的复制品**
   - `loop/contract.py`：
     - `dump_layout(layout: PageLayoutSpec) -> dict` — 缺 `version` 填 `CONTRACT_VERSION`、缺 `theme` 填 `palette.summary()`；先 `validate_doc`，有错抛 `ContractError`，消息里带**前 5 条**错误路径
     - `write_layout_atomic(path: str, doc: dict) -> None` — 与 `loop/build_loop.py::write_pagespec_atomic`（:21）同语义：写 `<path>.tmp` → `os.replace`；任何失败清 `.tmp` 并原样抛
@@ -513,7 +520,7 @@ git commit -m "feat(contract): pagelayout.json 读回入口 + 四个 from_dict�
 
 - [ ] **Step 1: 写失败测试 `tests/test_step34_contract_write.py`**
 
-共 **6** 个 test method：
+共 **8** 个 test method：
 
 | 测试名 | 断言 |
 |---|---|
@@ -523,6 +530,8 @@ git commit -m "feat(contract): pagelayout.json 读回入口 + 四个 from_dict�
 | `test_write_layout_atomic_leaves_no_tmp_on_failure` | 传一份含不可序列化对象（`object()`）的 doc → 抛错；断言 `<path>.tmp` 不存在；断言已存在的目标文件字节 **不变** |
 | `test_new_fields_default_to_none_and_models_construction_is_backward_compatible` | `ElementSpec("a","rect","liquid",0,0,1,1)` 仍可构造；`ElementSpec` 三个新字段默认 `None`；`PageSpec.from_dict` 能接住 `chart={"kind":"thermometer"}` 并读回 |
 | `test_new_fields_are_last_in_dataclass` | `[f.name for f in fields(ElementSpec)][-3:] == ["lines","font_pt","editable"]`；`[f.name for f in fields(PageSpec)][-1] == "chart"`；`[f.name for f in fields(PageLayoutSpec)][-2:] == ["version","theme"]`。这条把 `loop/models.py:35` 的注释变成可执行约束 |
+| `test_scale_required_closes_the_last_crash_path` | ⑥ 把 `cards[0].spec.scale` 里的 `unit` 删掉：`validate_doc(doc)` **必须**报出 `$.cards[0].spec.scale.unit`（`required key is missing`），并断言 `PageSpec.from_dict` 对同一份 spec 抛 `TypeError`（证明这是**真**假阴性，不是理论担忧）。这是控制器追加的 `$defs.scale` 收紧的判据 |
+| `test_chart_survives_both_readers` | `chart={"kind":"thermometer","unit":"%"}` 的 spec：`PageSpec.from_dict(d).to_dict()["chart"]` 与 `_spec_from_dict(d, "x", []).to_dict()["chart"]` 等值且非 `None`。这条把「两条构造路径必须同步」变成可执行判据（消重前会红） |
 
 - [ ] **Step 2: 跑它，确认是红的**
 
@@ -532,29 +541,31 @@ cd /d/appmy/news-dataviz && python -m unittest tests.test_step34_contract_write 
 
 预期：`ImportError: cannot import name 'dump_layout' from 'loop.contract'`。
 
-- [ ] **Step 3: 改 `loop/models.py`**
+- [ ] **Step 3: 改 `loop/models.py`（只加 `chart` 与注入口）**
 
-三个新字段放 `ElementSpec` 末尾、`chart` 放 `PageSpec` 末尾，各带一行注释说明用途与"缺省 None 保证改版前的 JSON 仍能读回"（照 `image_path`（:38-42）与 `content_bbox`（:57-62）的既有写法）。`PageSpec.from_dict` 加 `chart=d.get("chart")`。
+`chart` 放 `PageSpec` 末尾，带一行注释说明用途与"缺省 None 保证改版前的 JSON 仍能读回"（照 `frame_bbox`（:67-69）的既有写法）。`PageSpec.from_dict` 加 `chart=d.get("chart")`，并把签名改成 `from_dict(cls, d: dict, element_factory=ElementSpec)`、`elements=[element_factory(e) for e in d.get("elements", [])]`。
 
-- [ ] **Step 4: 改 `loop/layout.py` 的 `PageLayoutSpec.to_dict()`**
+**`ElementSpec` 的三个字段已在 Task 3 落地于 `loop/models.py:47-49`，不要碰。**
 
-补两个键，**放在末尾**：
+- [ ] **Step 4: 消掉 `loop/layout.py::_spec_from_dict` 的重复构造**
+
+`PageLayoutSpec.to_dict()` 的 `version`/`theme` **已在 Task 3 写完（`loop/layout.py:480`），不要动**。本 Step 只做消重：
+
+`_spec_from_dict`（`loop/layout.py:1027`）现在是 `loop/models.py::PageSpec.from_dict`（`:75`）的 11 键复制品，注释自己写着「两处必须同步」——这正是漂移温床，而本 Task 正要给 `PageSpec` 加第 12 个键 `chart`。改成：
 
 ```python
-    def to_dict(self) -> dict:
-        return {"width_in": self.width_in, "height_in": self.height_in,
-                "margin_in": self.margin_in, "gutter_in": self.gutter_in,
-                "column_count": self.column_count,
-                "column_gutter_in": self.column_gutter_in,
-                "rows": list(self.rows), "cards": [c.to_dict() for c in self.cards],
-                "blocks": [b.to_dict() for b in self.blocks],
-                "images": [i.to_dict() for i in self.images],
-                "version": self.version, "theme": self.theme}
+def _spec_from_dict(d: dict, where: str, warnings: list) -> PageSpec:
+    return PageSpec.from_dict(
+        d, element_factory=lambda e: _element_from_dict(e, where, warnings))
 ```
 
-> 键序变化会让 Task 1 的指纹**不**变（指纹只抽几何），但会让 Task 3 的 `to_dict()` 输出多两个键——Task 3 的 superset 断言已经预留了这种情况。
+**只此一条构造路径。** `PageSpec.from_dict` 的默认参数保证既有调用方行为不变。
 
-- [ ] **Step 5: 在 `loop/contract.py` 实现 `dump_layout` / `write_layout_atomic`**
+- [ ] **Step 4b: 修 `tests/test_step33_contract_read.py::test_geometry_is_not_translated_on_read` 的末句**
+
+Task 3 评审实测：该测试末句「全库最小 `x_in` **不是** 0.4」**结论对但理由错**——真正抓住平移的是它前面那几条（卡片 `x_in == 0.4` / `y_in == 2.3875`、卡片内 `role == "frame"` 的 `x_in == 0.0` / `y_in == 0.0`）；末句在 `_plain.pagelayout.json`（`cards == 0`，没有卡片内元素）下会红，即便在 `auto_layout` 上也是被卡片内相对坐标的 `0.0` 压住才「不等于 0.4」，抓不到页面级整体平移。改成两条诚实的 C2 断言：**页面级元素**的最小 `x_in == 0.4`（页边距），**全部元素（含卡片内）**的最小 `x_in == 0.0`（卡片内相对原点）。只改这一条测试的断言，不改被测代码。
+
+- [ ] **Step 5: 在 `loop/contract.py` 实现 `dump_layout` / `write_layout_atomic`，并收紧 `frontend/schema/pagelayout.schema.json`**
 
 ```python
 def dump_layout(layout: PageLayoutSpec) -> dict:
@@ -571,6 +582,13 @@ def dump_layout(layout: PageLayoutSpec) -> dict:
     return doc
 ```
 
+**同一个 Step 里改 `frontend/schema/pagelayout.schema.json` 两处**（Task 2 评审遗留的 Minor 1 / Minor 2）：
+
+1. `$defs.scale`（当前 `:191-212`）补 `"required": ["v_max", "h_in", "unit"]`。理由：`loop/models.py:81` 是 `Scale(**d["scale"])` 硬取这三个键，而 schema 现在放行残缺 scale —— 与 Task 2 被定为「最重要」的 `$defs.page` 必填是**同一类假阴性**，只差一层。评审探针：删 `scale.unit` 后 `validate_doc → []`，紧接着 `PageSpec.from_dict → TypeError Scale.__init__() missing 1 required positional argument: 'unit'`。
+2. 顶层 `description`（约 `:5`）现在写着「只允许 loop/schema_check.py::SUPPORTED_KEYWORDS 里的关键字」，而 `$ref` 已在 Task 2 补丁里被拆出白名单、改为按 `#/$defs/` 前缀单独校验 → 补一句说明，别让读者以为 `$ref` 不受管。
+
+> 不要动这份 schema 的其它任何一行：各层 `$defs` 的键集是 Task 2 用 13 份样本机械枚举出来的，改一个键就可能让本 Task 的 `test_dump_layout_output_passes_strict_schema` 变红。
+
 - [ ] **Step 6: 跑测试与全量**
 
 ```bash
@@ -579,15 +597,20 @@ python -m unittest tests.test_step34_contract_write -v
 python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 6 tests` / `OK`；全量 `Ran 704 tests` / `OK`。
+预期：`Ran 8 tests` / `OK`；全量 `Ran 706 tests` / `OK`。
 
 - [ ] **Step 7: 提交**
 
 ```bash
 cd /d/appmy/news-dataviz
-git add loop/models.py loop/layout.py loop/contract.py tests/test_step34_contract_write.py
-git commit -m "feat(contract): version/theme/chart/lines 字段与严格写出（P1 Task 4）"
+git add loop/models.py loop/layout.py loop/contract.py \
+        frontend/schema/pagelayout.schema.json tests/test_step33_contract_read.py \
+        tests/test_step34_contract_write.py
+git commit -m "feat(contract): chart 字段 + 严格写出 + 消重构造路径（P1 Task 4）"
 ```
+
+> `git add` 必须把本 Task 改过的 **6 个文件全部**列上：`frontend/schema/pagelayout.schema.json`（Step 5 的 `$defs.scale` 必填与顶层 description）与 `tests/test_step33_contract_read.py`（Step 4b 的 C2 断言）是控制器追加项，漏了就落不进这个提交。
+> 提交信息不再提 `version`/`theme`/`lines`——那三样已在 Task 3 的 `e3d63be` 落地。
 
 ---
 
@@ -685,7 +708,7 @@ python -m unittest tests.test_step35_card_text -v
 python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 6 tests` / `OK`；全量 `Ran 710 tests` / `OK`。**注意**：`flow_layout` 现在会返回带 `lines` 的卡片，`to_dict()` 的产物会变大——Task 1 的指纹测试必须**仍然绿**（卡片内 `lines` 不进指纹）。
+预期：`Ran 6 tests` / `OK`；全量 `Ran 712 tests` / `OK`。**注意**：`flow_layout` 现在会返回带 `lines` 的卡片，`to_dict()` 的产物会变大——Task 1 的指纹测试必须**仍然绿**（卡片内 `lines` 不进指纹）。
 
 - [ ] **Step 6: 提交**
 
@@ -744,7 +767,7 @@ python -m unittest tests.test_step36_contract_guards -v
 python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 5 tests` / `OK`（其中 1 个 skip）；全量 `Ran 715 tests` / `OK (skipped=1)`。
+预期：`Ran 5 tests` / `OK`（其中 1 个 skip）；全量 `Ran 717 tests` / `OK (skipped=1)`。
 
 - [ ] **Step 5: 提交**
 
@@ -765,7 +788,7 @@ git commit -m "test(contract): V5 宽松读/严格写与 V6 主题单一来源�
 **Interfaces:**
 - Consumes: `tests/contract_fixtures.py`、`loop.contract`、`scripts/build_*_demo.py`（**只运行，不修改**）
 - Produces:
-  - `tests/test_step37_contract_delivery.py` 内定义验收常量：`EXPECTED_MIN_TESTS = 718`、`EXPECTED_CONTRACT_VERSION = "1.0"`
+  - `tests/test_step37_contract_delivery.py` 内定义验收常量：`EXPECTED_MIN_TESTS = 720`、`EXPECTED_CONTRACT_VERSION = "1.0"`
 
 - [ ] **Step 1: 写失败测试 `tests/test_step37_contract_delivery.py`**
 
@@ -815,7 +838,7 @@ python -m unittest tests.test_step31_contract_fixtures -v
 cd /d/appmy/news-dataviz && python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 718 tests` / `OK (skipped=1)`。
+预期：`Ran 720 tests` / `OK (skipped=1)`。
 
 - [ ] **Step 6: 确认工作区干净、Nothing 越界**
 
@@ -841,7 +864,7 @@ git push -u origin frontend/pagespec-contract
 
 - [ ] **Step 8: 把 PR 描述写进交付消息**（本机无 `gh`，不能自动开 PR）
 
-交付消息里必须包含：PR 链接 https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 、本次提交范围（设计文档 `1797572` + P1 七个 Task 的提交）、`Ran 718 tests` 的实测输出、`git diff --stat main...HEAD` 的实际改动清单、以及「已知偏差」三条（`frontend/schema/` 的位置、**不改 `preview.py`**、沿用未合分支）、Review Focus 第 3 条（折行等价）的实测结论。
+交付消息里必须包含：PR 链接 https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 、本次提交范围（设计文档 `1797572` + P1 七个 Task 的提交）、`Ran 720 tests` 的实测输出、`git diff --stat main...HEAD` 的实际改动清单、以及「已知偏差」三条（`frontend/schema/` 的位置、**不改 `preview.py`**、沿用未合分支）、Review Focus 第 3 条（折行等价）的实测结论。
 
 ---
 

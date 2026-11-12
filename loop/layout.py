@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 
 from PIL import Image
 
-from loop import palette, text_flow
+from loop import card_text, palette, text_flow
 from loop.fit import BoundaryError
 from loop.models import ElementSpec, PageSpec, Scale
 from loop.selector import SEMANTIC_OTHER
@@ -892,7 +892,9 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
                     rect=(dx, dy, dw, dh), scale=page_scale))
             else:
                 placed.append(PlacedCard(
-                    card=item, spec=spec, x_in=round(x, 6), y_in=round(y, 6),
+                    card=item, spec=card_text.annotate_card_text(
+                        spec, palette.spec_scale(spec)),
+                    x_in=round(x, 6), y_in=round(y, 6),
                     w_in=round(w, 6), h_in=round(h, 6), row=row_index))
             slot += span if layout.column_count > 1 else 0
             x_cursor = round(x_cursor + w + layout.gutter_in, 6)

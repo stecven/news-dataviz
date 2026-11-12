@@ -117,16 +117,23 @@ HEX_COLOR_RE = re.compile(
     r"#(?:(?:[0-9a-fA-F]{8})|(?:[0-9a-fA-F]{6})|(?:[0-9a-fA-F]{3}))"
     r"(?![0-9a-zA-Z_-])")
 
-#: 写死字号，两支并列：
+#: 函数式颜色：``rgb()`` / ``rgba()`` / ``hsl()`` / ``hsla()``（``#`` 之外的常见写法）。
 #:
-#: 1. ``font-size:`` / ``fontSize=`` 后面跟数字（``style.fontSize = 14``）；
-#: 2. 引号**紧跟**数字，数字后接 ``px`` / ``pt``（``ctx.font = "12px sans"``）。
-#:
-#: 第 2 支**不能**写成 ``["']\d+(px|pt)["']``（数字前后都要求闭合引号）：
-#: 真实写法是 ``"12px sans"``，数字后面还有字体名，那样写对真实代码 0 命中。
-#: ``theme.fontSizes.label`` 不命中（``fontSize`` 后面跟的是 ``s``，不是 ``:`` / ``=``）。
-FONT_SIZE_RE = re.compile(
-    r"""(?:font-size|fontSize)\s*[:=]\s*["']?\d|["']\d+(?:px|pt)\b""")
+#: 前面用 ``(?<![\w$.])`` 排除 ``myrgb(`` 这类自定义函数名。
+#: **``0x`` 十六进制字面量不在覆盖范围内**（见 :func:`find_hardcoded_theme_tokens`
+#: 的说明）：``0xFFFFFF`` 与位运算掩码 ``& 0xFFFFFF`` 无法区分。
+FUNC_COLOR_RE = re.compile(r"(?<![\w$.])(?:rgba?|hsla?)\s*\(\s*[-+\d.]")
+
+#: 字号关键字 + 紧邻数字，必中（``style.fontSize = 14`` / ``font: 12px`` /
+#: ``font-size: 1.2rem``）。``font`` 单列一支是为了覆盖 ``ctx.font = "12px"``。
+FONT_SIZE_KEYWORD_RE = re.compile(
+    r"""(?:font-size|fontSize|font)\s*[:=]\s*["']?\d""")
+
+#: ``px`` / ``pt`` 字面量。**单独用会误报**：``style.width = "100px"`` /
+#: ``border = "1px solid"`` / ``translate("12px", 0)`` 都不是字号，所以只有
+#: 同一语句（``;`` 之后）的前缀里出现 ``font`` 才算命中 —— 位置判断在
+#: :func:`find_hardcoded_theme_tokens` 里做，不硬凑成一条更长更难懂的正则。
+FONT_SIZE_LITERAL_RE = re.compile(r"\d+(?:px|pt)\b")
 
 
 def iter_js_sources() -> list[str]:
@@ -149,13 +156,43 @@ def find_hardcoded_theme_tokens(source: str) -> list[tuple[int, str]]:
     """扫一段 JS 源码里的写死色值 / 字号：``[(行号, 匹配文本), ...]``。
 
     行号从 1 开始，同一行内的命中按列序排列。命中的是「从 ``#``（或
-    ``font-size`` / 数字前的引号）开始的文本」，用来在失败信息里指给出处。
+    ``rgb(`` / 数字）开始的文本」，用来在失败信息里指给出处。
+
+    **当前识别的形态**（README 里的清单与此处一致）::
+
+        #rgb  #rrggbb  #rrggbbaa        十六进制色值，大小写都算
+        rgb(  rgba(  hsl(  hsla(        函数式颜色，参数以数字开头才算
+        font-size:/fontSize=/font= + 数字
+        含 font 的语句里的 12px / 9pt
+
+    **不识别**：``0xRRGGBB`` 十六进制字面量 —— ``0xFFFFFF`` 与位运算掩码
+    ``& 0xFFFFFF`` 在文本上无法区分，认了会误伤位运算。写死颜色的正路是
+    ``#`` 或 ``rgb()``，``0x`` 不在契约鼓励的写法里。
+
+    ``px`` / ``pt`` 字面量必须**有字号上下文**才算命中，否则
+    ``style.width = "100px"`` / ``border: "1px solid"`` 会被误判成字号。
     """
     hits: list[tuple[int, str]] = []
     for lineno, line in enumerate(source.splitlines(), start=1):
-        found = [(m.start(), m.group(0)) for m in HEX_COLOR_RE.finditer(line)]
-        found += [(m.start(), m.group(0)) for m in FONT_SIZE_RE.finditer(line)]
-        for _col, text in sorted(found, key=lambda item: item[0]):
+        found: list[tuple[int, int, str]] = []
+        for pattern in (HEX_COLOR_RE, FUNC_COLOR_RE, FONT_SIZE_KEYWORD_RE):
+            found += [(m.start(), m.end(), m.group(0))
+                      for m in pattern.finditer(line)]
+
+        # ``12px`` / ``9pt``：只有当同一语句（``;`` / ``{`` 之后）的前缀里出现
+        # ``font`` 才算字号，才不像 width / border / padding / translate。
+        for m in FONT_SIZE_LITERAL_RE.finditer(line):
+            statement = line[:m.start()]
+            for sep in (";", "{", "}"):
+                statement = statement.rsplit(sep, 1)[-1]
+            if "font" not in statement.lower():
+                continue
+            # 已被 keyword 分支覆盖的（``fontSize = 12px``）不重复报。
+            if any(start <= m.start() < end for start, end, _t in found):
+                continue
+            found.append((m.start(), m.end(), m.group(0)))
+
+        for _start, _end, text in sorted(found, key=lambda item: item[0]):
             hits.append((lineno, text))
     return hits
 

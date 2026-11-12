@@ -7,8 +7,8 @@
 * V5 后半（写得出去）：任何读进来的文档 ``dump_layout`` 出来的**返回值**都过严格
                   schema、带 ``version == "1.0"``、``theme == palette.summary()``
                  → ``test_new_documents_pass_strict_schema``
-* V6 Python 侧：``theme`` 不是从旧图纸抄来的，而是**当前** ``palette.py`` 的产物
-                 → ``test_theme_comes_from_palette_not_from_disk``
+* V6 Python 侧：``theme`` 缺则补**当前** ``palette.py`` 的产物，有则**原样保留**
+                 → ``test_dump_layout_fills_missing_theme_from_current_palette``
 * V6 守卫自检：扫描器对样本片段抓得住十六进制色值与写死字号（否则守卫是摆设）
                  → ``test_theme_token_scanner_catches_hex_and_font_size``
 * V6 本体：``frontend/src/**/*.js`` 里除 ``theme.js`` 外不许出现色值/写死字号
@@ -24,6 +24,7 @@
 """
 import os
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 from loop import palette
@@ -86,13 +87,13 @@ class TestNewDocumentsWriteStrictly(unittest.TestCase):
 class TestThemeSingleSource(unittest.TestCase):
     """V6：颜色与字号只有一个来源 —— ``loop/palette.py``。"""
 
-    def test_theme_comes_from_palette_not_from_disk(self):
+    def test_dump_layout_fills_missing_theme_from_current_palette(self):
         path = _legacy_paths()[0]
-        # 老夹具里根本没有 theme（0.x），dump 出来的 theme 只能是本地色板。
+        # ---- 支一：老夹具**没有** theme（0.x）→ 补当前色板 ----
         doc = dump_layout(load_layout(path).layout)
         self.assertEqual(doc["theme"], palette.summary())
 
-        # 改色板 → 写出的 theme 跟着变，证明它是**当前** palette 的产物。
+        # 改色板 → 补进去的 theme 跟着变，证明补的是**当前** palette 的产物。
         forged = dict(palette.summary())
         forged["palette"] = dict(forged["palette"], primary="123456")
         forged["font_sizes"] = dict(forged["font_sizes"], title=99)
@@ -100,6 +101,18 @@ class TestThemeSingleSource(unittest.TestCase):
             patched = dump_layout(load_layout(path).layout)
         self.assertEqual(patched["theme"], forged)
         self.assertNotEqual(patched["theme"], palette.summary())
+
+        # ---- 支二：图纸**已有** theme → 原样保留，不拿本地色板覆盖 ----
+        # 这一支钉的是 ``dump_layout`` 的「缺则补、有则留」语义。没有它，上面
+        # 那一支是构造性的（老夹具必然缺 theme，永远走「补」那一支），并不能
+        # 证明 theme 不是从盘上抄的 —— P2 的 JS 渲染器要信任图纸里的 theme，
+        # 前提正是写出侧不篡改它。
+        stamped = {"palette": {"primary": "DEADBE"}, "font_sizes": {"title": 7}}
+        layout = replace(load_layout(path).layout, theme=stamped)
+        kept = dump_layout(layout)["theme"]
+        self.assertEqual(kept, stamped)                       # 原样保留
+        self.assertNotEqual(kept, palette.summary())          # 没被本地色板覆盖
+        self.assertEqual(kept["palette"]["primary"], "DEADBE")  # 逐字段仍是图纸的值
 
     def test_theme_token_scanner_catches_hex_and_font_size(self):
         snippet = "\n".join([
@@ -123,12 +136,43 @@ class TestThemeSingleSource(unittest.TestCase):
         self.assertIn("#C01F2A", [text for _line, text in hits])
         self.assertIn("#abc", [text for _line, text in hits])
 
+        # ---- 仍然必须命中（字号的各种真实写法）----
+        for line in ('ctx.font = "12px sans"',
+                     'el.style.fontSize = "12px"',
+                     'style.fontSize = 14',
+                     'font-size: 12px',
+                     'font-size: 1.2rem',
+                     'font: 12px/1.5 sans'):
+            with self.subTest(must_hit=line):
+                self.assertNotEqual(cf.find_hardcoded_theme_tokens(line), [],
+                                    f"{line} 是写死字号，应当命中")
+
+        # ---- 不许再命中（长度单位不是字号）----
+        for line in ('el.style.width = "100px"',
+                     'el.style.border = "1px solid transparent"',
+                     'el.style.padding = "9pt"',
+                     'ctx.translate("12px", 0)'):
+            with self.subTest(must_miss=line):
+                self.assertEqual(cf.find_hardcoded_theme_tokens(line), [],
+                                 f"{line} 是尺寸不是字号，不该命中")
+
+        # ---- 函数式颜色 ----
+        for line in ('ctx.fillStyle = "rgb(192,31,42)"',
+                     'ctx.fillStyle = "rgba(192, 31, 42, 0.5)"',
+                     'fill = "hsl(350, 60%, 44%)"'):
+            with self.subTest(must_hit=line):
+                self.assertNotEqual(cf.find_hardcoded_theme_tokens(line), [],
+                                    f"{line} 是写死颜色，应当命中")
+        self.assertEqual(cf.find_hardcoded_theme_tokens('const s = "custom(";'),
+                         [], "自定义函数名不该被当成 rgb()")
+
         # 干净片段必须是 0 命中，否则这条守卫只能靠白名单维持，很快形同虚设。
         self.assertEqual(
             cf.find_hardcoded_theme_tokens(
                 'const c = theme.palette.title;\n'
                 'const f = theme.font_sizes.title;\n'
-                'el.style.color = c;\n'),
+                'el.style.color = c;\n'
+                'el.style.fontSize = theme.font_sizes.title;\n'),
             [])
 
     def test_frontend_sources_have_no_hardcoded_theme_tokens(self):

@@ -42,7 +42,25 @@ schema，不合规抛 `ContractError`）。
 因此 `frontend/src/` 里**禁止**出现：
 
 - 十六进制色值字面量（`#rgb` / `#rrggbb` / `#rrggbbaa`，大小写都算）；
-- 写死的字号（`font-size: 12`、`fontSize = 14`、`"12px"` / `"9pt"` 这类字面量）。
+- 函数式颜色（`rgb()` / `rgba()` / `hsl()` / `hsla()`，参数以数字开头）；
+- 写死的字号（`font-size: 12px`、`fontSize = 14`、`ctx.font = "12px sans"`、
+  `font: 12px/1.5 sans`、`font-size: 1.2rem`）。
+
+**守卫当前识别的形态**（`tests/contract_fixtures.py::find_hardcoded_theme_tokens`，
+清单与实现同步维护）：
+
+| 形态 | 例子 | 是否拦截 |
+|---|---|---|
+| `#` + 3/6/8 位十六进制 | `"#C01F2A"` / `"#abc"` / `"#00ff0080"` | 拦 |
+| `rgb()` / `rgba()` / `hsl()` / `hsla()` | `"rgb(192,31,42)"` | 拦 |
+| `font-size:` / `fontSize=` / `font:` + 数字 | `fontSize = 14` / `font: 12px/1.5 sans` | 拦 |
+| 含 `font` 的语句里的 `\d+px` / `\d+pt` | `ctx.font = "12px sans"` | 拦 |
+| `0x` 十六进制字面量 | `0xC01F2A` | **不拦**（见下） |
+| 尺寸类长度 | `style.width = "100px"` / `border: "1px solid"` | 不拦（不是字号） |
+
+`0x` **不在覆盖范围内**是有意的：`0xFFFFFF` 与位运算掩码（`& 0xFFFFFF`、
+`| 0xFF`）在文本上无法区分，认了会误伤位运算。写死颜色的正路是 `#` 或
+`rgb()`，`0x` 本来就不在契约鼓励的写法里。
 
 正确写法是从 `theme` 里按角色取：
 

@@ -49,6 +49,18 @@ class ElementSpec:
     editable: bool | None = None
 
 
+def _strict_element(d: dict) -> ElementSpec:
+    """默认图元工厂：``ElementSpec(**d)`` —— 未知键直接 ``TypeError``（严格口径）。
+
+    注入口 ``PageSpec.from_dict(..., element_factory=...)`` 的默认值不能直接写
+    ``ElementSpec``：工厂是**按一个 dict 调用**的（``element_factory(e)``），而
+    ``ElementSpec(dict)`` 会把 dict 当成 ``id``，缺 6 个必填位 → 既有调用方
+    （``models.py`` 之外的 ``PageSpec.from_dict(doc)``）当场全红。所以默认值写成
+    这个薄包装，既保住既有行为，又给出可注入点。
+    """
+    return ElementSpec(**d)
+
+
 @dataclass
 class PageSpec:
     width_in: float
@@ -67,22 +79,36 @@ class PageSpec:
     # 都是 [x, y, w, h]，缺省 None 保证改版前的 pagespec.json 仍可读。
     content_bbox: list | None = None
     frame_bbox: list | None = None
+    # 1.0 契约新增（Spec §5.6 / D3）：图表的语义层，形如
+    # ``{"kind": ..., "series": ..., "encoding": ...}``；渲染器仍必须能只靠
+    # elements 画图。缺省 None 保证改版前的 pagespec.json 仍能读回。
+    # **必须留在末尾**：按位置构造 PageSpec(...) 的调用方不受影响。
+    chart: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "PageSpec":
+    def from_dict(cls, d: dict, element_factory=_strict_element) -> "PageSpec":
+        """从文档读回一份 ``PageSpec``。
+
+        ``element_factory`` 是可选注入口，默认 ``_strict_element``（即
+        ``ElementSpec(**e)``，遇未知键抛 ``TypeError``）；宽松读入口
+        （``loop/layout.py::_spec_from_dict``）传
+        ``lambda e: _element_from_dict(e, where, warnings)``，把未知键降级成
+        warning。默认值保证既有调用方行为不变。
+        """
         return cls(
             width_in=d["width_in"],
             height_in=d["height_in"],
             chart_key=d["chart_key"],
             chart_title=d["chart_title"],
             scale=Scale(**d["scale"]),
-            elements=[ElementSpec(**e) for e in d.get("elements", [])],
+            elements=[element_factory(e) for e in d.get("elements", [])],
             semantic_tags=d.get("semantic_tags", []),
             constraints=d.get("constraints", []),
             layout=d.get("layout", {}),
             content_bbox=d.get("content_bbox"),
             frame_bbox=d.get("frame_bbox"),
+            chart=d.get("chart"),
         )

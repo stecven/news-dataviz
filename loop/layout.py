@@ -1027,20 +1027,10 @@ def _element_from_dict(d: dict, where: str, warnings: list) -> ElementSpec:
 def _spec_from_dict(d: dict, where: str, warnings: list) -> PageSpec:
     """``PageSpec.from_dict`` 的宽松版：``elements`` 走 ``_element_from_dict``。
 
-    其余键的口径与 ``loop/models.py::PageSpec.from_dict`` 逐字一致（硬取那 5
-    个结构必填键，其余 ``.get`` 兜底）—— 两处必须同步。
+    这是卡片内 spec 的**唯一**构造路径：原先那份 11 键复制品已删除 —— 它自己
+    写着「两处必须同步」，而给 ``PageSpec`` 加第 12 个键（``chart``）正是会漂移
+    的那种改动。宽松口径全靠注入口 ``element_factory`` 实现，其余键的读法与
+    ``PageSpec.from_dict`` 是同一份代码。
     """
-    return PageSpec(
-        width_in=d["width_in"],
-        height_in=d["height_in"],
-        chart_key=d["chart_key"],
-        chart_title=d["chart_title"],
-        scale=Scale(**d["scale"]),
-        elements=[_element_from_dict(e, f"{where}.elements[{i}]", warnings)
-                  for i, e in enumerate(d.get("elements", []))],
-        semantic_tags=d.get("semantic_tags", []),
-        constraints=d.get("constraints", []),
-        layout=d.get("layout", {}),
-        content_bbox=d.get("content_bbox"),
-        frame_bbox=d.get("frame_bbox"),
-    )
+    return PageSpec.from_dict(
+        d, element_factory=lambda e: _element_from_dict(e, where, warnings))

@@ -102,13 +102,21 @@ class TestContractReadEntry(unittest.TestCase):
         self.assertEqual(frames[0].x_in, 0.0)
         self.assertEqual(frames[0].y_in, 0.0)
 
-        xs = [c.x_in for c in layout.cards]
-        xs += [b.x_in for b in layout.blocks]
-        xs += [i.x_in for i in layout.images]
+        # 两条诚实的 C2 断言：页面级元素（卡片 / 整版块 / 插图）的最小 x 落在
+        # 页边距 0.4 上——读回没有把整版平移到左边距；卡片内元素的坐标是
+        # **相对**卡片左上角的（约束 C2），所以全部元素的最小 x 是卡片内的
+        # 相对原点 0.0。
+        page_xs = [c.x_in for c in layout.cards]
+        page_xs += [b.x_in for b in layout.blocks]
+        page_xs += [i.x_in for i in layout.images]
+        self.assertEqual(min(page_xs), 0.4,
+                         "页面级最小 x 不是页边距，说明读回时动了几何")
+
+        all_xs = list(page_xs)
         for c in layout.cards:
-            xs += [e.x_in for e in c.spec.elements]
-        self.assertNotEqual(min(xs), 0.4,
-                            "整版最小 x 被平移到了左边距，说明读回时动了几何")
+            all_xs += [e.x_in for e in c.spec.elements]
+        self.assertEqual(min(all_xs), 0.0,
+                         "卡片内元素相对坐标原点不是 0.0，说明读回时动了几何")
 
 
 if __name__ == "__main__":

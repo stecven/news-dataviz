@@ -11,10 +11,13 @@
 这里只 re-export，方便调用方从契约模块拿到全部读口径。
 """
 import json
+import os
 from dataclasses import dataclass
 
+from loop import palette
 from loop.layout import (  # noqa: F401  （re-export：定义在 layout.py，避免循环 import）
     PageLayoutSpec, _element_from_dict, _spec_from_dict)
+from loop.schema_check import validate_doc
 
 #: 契约版本（``frontend/schema/pagelayout.schema.json`` 的 title 里那个 1.0）。
 CONTRACT_VERSION = "1.0"
@@ -54,3 +57,45 @@ def load_layout(path: str) -> ReadResult:
     """读盘上的 ``pagelayout.json``：``json.load`` + ``load_layout_json``。"""
     with open(path, encoding="utf-8") as fh:
         return load_layout_json(json.load(fh))
+
+
+def dump_layout(layout: PageLayoutSpec) -> dict:
+    """严格写出：补 ``version`` / ``theme`` → 过 schema → 原样返回（不落盘）。
+
+    读的一侧宽松（老文档、未来文档都读得进来），**写的一侧严格**：写出的
+    文档必须过 ``validate_doc``，否则消费端（JS 渲染器）会在运行时炸。缺
+    ``version`` 填 ``CONTRACT_VERSION``，缺 ``theme`` 填 ``palette.summary()``
+    （渲染层的色板 / 字号单一来源）。
+    """
+    doc = layout.to_dict()
+    if not doc.get("version"):
+        doc["version"] = CONTRACT_VERSION
+    if not doc.get("theme"):
+        doc["theme"] = palette.summary()
+    errors = validate_doc(doc)
+    if errors:
+        head = "; ".join(f"{e['path']}: {e['message']}" for e in errors[:5])
+        raise ContractError(f"{len(errors)} 处不符合契约（前 5 条）：{head}")
+    return doc
+
+
+def write_layout_atomic(path: str, doc: dict) -> None:
+    """先写同目录 ``.tmp``，再 ``os.replace`` 原子替换目标。
+
+    与 ``loop/build_loop.py::write_pagespec_atomic``（:21）同语义，**刻意复制**
+    而不 import 那一个：``loop/build_loop.py`` 顶部拖着 ``loop.render*``
+    （python-pptx）与 ``loop.preview``（Pillow），契约层是纯数据模块，不该为
+    这 8 行把渲染依赖拖进来。代价是两处必须同步 —— 改这里请同时改那里。
+
+    任何失败（含 ``json.dump`` 序列化失败）都清掉 ``.tmp`` 并原样抛出，目标
+    文件保持原字节不变。
+    """
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise

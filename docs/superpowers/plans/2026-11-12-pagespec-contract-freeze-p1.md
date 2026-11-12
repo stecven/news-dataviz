@@ -741,11 +741,17 @@ git commit -m "feat(contract): 卡片内文本折行与字号写进契约（P1 T
 
 | 测试名 | 断言 |
 |---|---|
-| `test_legacy_samples_read_loosely_with_warnings`（V5 前半） | 对 Task 1 的**全部 11 份**样本（`out/demo` 缺失时退化为 2 份夹具）：`load_layout(path)` 不抛；每份都至少产出 1 条 warning；每份都含一条关于 `version` 的 warning |
-| `test_new_documents_pass_strict_schema`（V5 后半） | 每份样本 `load_layout` → `dump_layout` → `validate_doc(doc) == []`；`doc["version"] == "1.0"` |
+| `test_legacy_samples_read_loosely_with_warnings`（V5 前半） | **只对两份冻结夹具**（`tests/fixtures/contract/legacy/`）：`load_layout(path)` 不抛；每份 `>= 1` 条 warning；每份含一条关于 `version` 的 warning。**不要对 `demo_layout_paths()` 断言 warning 条数**（见下方 T6-A/T6-B 裁决——现网 `out/demo` 会被 Task 7 重新生成，重新生成后 warning 变 0 条，这条断言会与 Task 7 打架） |
+| `test_new_documents_pass_strict_schema`（V5 后半） | 对**两份夹具 + `demo_layout_paths()` 的每一份**：`dump_layout(load_layout(p).layout)` → `validate_doc(doc) == []`；`doc["version"] == "1.0"`；`doc["theme"] == palette.summary()`。**断言对象是 `dump_layout` 的返回值（写出侧的能力），不是盘上文件的原始字节**（见 T6-B）——盘上是否已重新生成由 Task 7 负责 |
 | `test_theme_comes_from_palette_not_from_disk`（V6 的 Python 侧） | `dump_layout(x)["theme"] == palette.summary()`（深比较）；改 `palette.summary()` 的返回（`patch` 掉）后 `dump_layout` 跟着变。这条证明主题**不是**从旧图纸抄来的，而是**当前** `palette.py` 的产物 |
 | `test_theme_token_scanner_catches_hex_and_font_size`（V6 的自检） | `find_hardcoded_theme_tokens` 对样本代码片段能抓到 `fill = "#C01F2A"`、`stroke = "#abc"`、`ctx.font = "12px sans"`、`style.fontSize = 14`；对 `const c = theme.palette.title;` 返回 `[]`。**守卫必须先证明自己抓得住东西**，否则它只是个永远绿的摆设 |
 | `test_frontend_sources_have_no_hardcoded_theme_tokens`（V6 本体） | `iter_js_sources()` 为空时 `self.skipTest("frontend/src 尚未创建（P2 才建）")`；非空时逐个扫，**放过 `frontend/src/theme.js`**，其余有命中就 `self.fail` 并打印文件与行号 |
+
+**为什么表里前两条这样写（2026-11-12 controller 实测后的裁决，原稿是错的）**
+
+- **T6-A：「老样本宽松读」只认两份冻结夹具。** `out/` 被 `.gitignore` 挡住，fresh clone 上**根本不存在**，拿它当"老格式标本"等于让测试依赖本地产物；而 Task 1 已经在 `tests/fixtures/contract/legacy/` 冻了两份**永远不会被重新生成覆盖**的 0.x 文档，它们才是稳定的"老格式"。实测：两份夹具各产出 3 条 warning（`$.version` / `$.theme` / `$.images`），这 3 条是构造性的、不会随时间变。
+- **T6-B：`test_new_documents_pass_strict_schema` 断言的是「写出侧的能力」，不是盘上的字节。** 实测当前 `loop/compose.py` 与 4 个 `scripts/build_*_demo.py` 都是裸 `json.dump(page.to_dict(), ...)`，**`dump_layout` 在生产代码里 0 调用点**；而 `flow_layout` 造 `PageLayoutSpec` 时不传 `version`/`theme`（`loop/layout.py` 的 `flow_layout` 返回处），所以盘上样本的这两个键要么缺失、要么是 `None`。因此「盘上文件已合规」这件事只能由 **Task 7 重新生成之后**才成立；Task 6 若也这么断言，它会与 Task 7 的重新生成顺序打架（Task 6 跑在 Task 7 之前，那时盘上还是旧文件）。
+  - 反方向也堵死了：一旦产物带上了 `version`/`theme`，同样的文件 `load_layout` 的 warning 会**从 2–3 条掉到 1 条**（实测）——所以「每份至少 1 条 warning」如果套在 `demo_layout_paths()` 上，会在 Task 7 之后翻红。两个 Task 的断言必须分工：**Task 6 管"写入口/读入口各自的能力"，Task 7 管"盘上产物已经合规"。**
 
 - [ ] **Step 2: 跑它，确认是红的**
 
@@ -757,7 +763,16 @@ cd /d/appmy/news-dataviz && python -m unittest tests.test_step36_contract_guards
 
 - [ ] **Step 3: 在 `tests/contract_fixtures.py` 实现两个 helper，在 `frontend/README.md` 加一节**
 
-V6 的正则不要用 `\b#\w{3}\b`（会误伤注释与 URL 锚点）——用 `#[0-9a-fA-F]{3,8}\b` 并排除紧跟字母的 `#`（如 `#section`）。字号匹配 `(font-size|fontSize)\s*[:=]\s*["']?\d` 与 `["']\d+(px|pt)["']`。
+V6 的两条正则**必须用下面这份**（2026-11-12 controller 逐样本实测过；原稿的两条一条假阴性、一条误报，已作废）：
+
+```python
+HEX = re.compile(r"#(?:(?:[0-9a-fA-F]{8})|(?:[0-9a-fA-F]{6})|(?:[0-9a-fA-F]{3}))(?![0-9a-zA-Z_-])")
+FS  = re.compile(r"""(?:font-size|fontSize)\s*[:=]\s*["']?\d|["']\d+(?:px|pt)\b""")
+```
+
+- `HEX` 必须**先长后短**（8 → 6 → 3），并用 `(?![0-9a-zA-Z_-])` 排除紧跟字母数字下划线连字符的 `#`。实测：命中 `"#C01F2A"` / `"#abc"` / `"#00ff0080"`；**不命中** `url(#faded)` / `#section` / `#section-anchor` / `href="#fragment-1"`。注释里的 `#fff` 仍命中——**有意保守**，注释里写色值一样算写死。
+- `FS` 必须拆两支：`font-size:` / `fontSize=` 后面跟数字（`style.fontSize = 14`），或**引号后紧跟** `12px` / `9pt`（`ctx.font = "12px sans"` —— 注意引号**在数字前**、数字后接的是 ` sans` 而不是闭合引号，所以**不能**写成 `["']\d+(px|pt)["']` 那种闭合包围，那样对真实写法 0 命中）。实测：命中 `ctx.font = "12px sans"` / `el.style.fontSize = "12px"` / `x = "9pt"` / `fontSize: 14`；不命中 `theme.fontSizes.label`。
+- **不要**用 `#[0-9a-fA-F]{3,8}\b`：它会把 `url(#faded)`、`href="#fragment-1"` 里的 SVG 片段引用当成色值（假阳性 → 守卫被逼着加白名单，很快形同虚设）。
 
 - [ ] **Step 4: 跑测试与全量**
 
@@ -783,12 +798,46 @@ git commit -m "test(contract): V5 宽松读/严格写与 V6 主题单一来源�
 
 **Files:**
 - Create: `tests/test_step37_contract_delivery.py`
+- Modify: `loop/compose.py`（**只把落盘那一行换成契约写出**）、`scripts/build_illustrated_demo.py` / `scripts/build_multicol_demo.py` / `scripts/build_newspaper_demo.py` / `scripts/build_page_demo.py`（**各改一行**）
 - Test: `tests/test_step37_contract_delivery.py`
 
 **Interfaces:**
-- Consumes: `tests/contract_fixtures.py`、`loop.contract`、`scripts/build_*_demo.py`（**只运行，不修改**）
+- Consumes: `tests/contract_fixtures.py`、`loop.contract.dump_layout` / `write_layout_atomic`、`scripts/build_*_demo.py`（**运行它们；另按 T7-A 改动其中四处各一行落盘代码**）
 - Produces:
   - `tests/test_step37_contract_delivery.py` 内定义验收常量：`EXPECTED_MIN_TESTS = 722`、`EXPECTED_CONTRACT_VERSION = "1.0"`
+
+**为什么这个 Task 要动落盘代码（T7-A，2026-11-12 实测后的裁决）**
+
+`dump_layout` 是 P1 的核心交付物：它补 `version`、补 `theme`、过 schema，然后才允许写盘。但实测它**在生产代码里 0 调用点**——`loop/compose.py:548` 与四个 `scripts/build_*_demo.py` 里的落盘行都是裸 `json.dump(page.to_dict(), ...)`。
+
+后果不是"少加两个键"这么轻：**JS 渲染器跑不了 `palette.py`，图纸里的 `theme` 是它拿到色板与字号的唯一来源**（Spec §4 D11 的全部意义）。不接上 `dump_layout`，P2 的渲染器读到的 `theme` 永远是 `null`，等于现在就把 P2 的路堵死。
+
+接上它**不改变任何几何数字**（`dump_layout` = `to_dict()` + 补两键 + 过 schema），实测给 11 份样本塞这两键后指纹 `changed 0 / 11`。但 `scripts/` 在 `.github/CODEOWNERS` 里被钉给 @stecven、且 CONTRIBUTING §六写明"出图入口只有 `compose_page` 等几个"，所以**只改已存在的落盘行、不新增入口、不动其它逻辑**，并在 PR 描述里写清理由。
+
+- [ ] **Step 0: 把落盘路径接到契约写出**
+
+`loop/compose.py` 里找到（**按内容定位**：`grep -n 'json.dump(page.to_dict()' loop/compose.py`）：
+
+```python
+    with open(page_spec_path(out_dir), "w", encoding="utf-8") as fh:
+        json.dump(page.to_dict(), fh, ensure_ascii=False, indent=2)
+```
+
+换成：
+
+```python
+    write_layout_atomic(page_spec_path(out_dir), dump_layout(page))
+```
+
+（`from loop.contract import dump_layout, write_layout_atomic` 加在文件顶部 import 区。**注意**：`loop/contract.py` 只 import `palette` / `schema_check` / `layout`，不拖 PPTX 与 Pillow，不会与 `compose.py` 成环。）
+
+四个 `scripts/build_*_demo.py` 里同样形态的那三行 `with open(...) / json.dump(page.to_dict(), ...)` 换成 `write_layout_atomic(<同一路径>, dump_layout(page))`，import 同上。**逐文件只改这一处，不许顺手改别的。**
+
+改完先跑一次全量，确认 **714 仍全绿**（此步不该改变任何测试结果，`tests/test_step26_auto_compose.py` / `test_step27_multicol.py` / `test_step30_theme_match.py` 读的是产物路径而非字节）：
+
+```bash
+cd /d/appmy/news-dataviz && python -m unittest discover -s tests -t . -q
+```
 
 - [ ] **Step 1: 写失败测试 `tests/test_step37_contract_delivery.py`**
 
@@ -797,7 +846,7 @@ git commit -m "test(contract): V5 宽松读/严格写与 V6 主题单一来源�
 | 测试名 | 断言 |
 |---|---|
 | `test_every_demo_layout_regenerates_geometrically_identical` | 对 `demo_layout_paths()` 逐份：`fingerprint_sha(json.load(open(p))) == load_baseline()[p]["sha256"]`。**这是本计划唯一的"几何一个字节没变"判据**，在 Step 3 重新生成产物之后跑才有意义 |
-| `test_regenerated_documents_are_contract_conformant` | 逐份 `load_layout(p)` → `dump_layout(...)` → `validate_doc(...) == []`；`doc["version"] == "1.0"`；`doc["theme"]` 非空 |
+| `test_regenerated_documents_are_contract_conformant` | 逐份 `load_layout(p)` → `dump_layout(...)` → `validate_doc(...) == []`；`doc["version"] == "1.0"`；`doc["theme"]` 非空。**并且再断言盘上文件的原始字节**：`json.load(open(p))` 的 `version == "1.0"` 且 `theme` 非空——重新生成之后这两条必须同时成立，否则说明 Step 0 的落盘接线没生效 |
 | `test_card_text_elements_carry_lines_and_font_pt_after_regeneration` | 逐份：每张卡片的每个 text 元素 `lines` 是非空 list、`font_pt` 是正数 |
 
 - [ ] **Step 2: 跑它**（此时代码已全部就位，产物还是旧的，前两条应该已经绿）
@@ -808,7 +857,7 @@ cd /d/appmy/news-dataviz && python -m unittest tests.test_step37_contract_delive
 
 - [ ] **Step 3: 用现有 demo 构建脚本重新生成 11 份产物**
 
-这些脚本**不改动**，只是运行；产物落 `out/demo/`（已 gitignore）。逐个跑，逐个确认退出码为 0：
+这些脚本的**构建逻辑不改动**，只按 Step 0 改过落盘那一行；产物落 `out/demo/`（已 gitignore）。逐个跑，逐个确认退出码为 0：
 
 ```bash
 cd /d/appmy/news-dataviz
@@ -850,21 +899,23 @@ git diff --stat main...HEAD
 
 逐条确认：
 - `git status --short` 只有 `out/`（被 ignore，不该出现）之外的空输出；
-- `git diff --stat` 里**没有** `ingest/`、`assets/`、`db/`、`scripts/`、`CONTRIBUTING.md`、`.gitignore`、`.gitattributes`、`.github/`；
-- 改动只落在 `loop/`、`tests/`、`frontend/`、`docs/`。
+- `git diff --stat` 里**没有** `ingest/`、`assets/`、`db/`、`CONTRIBUTING.md`、`.gitignore`、`.gitattributes`、`.github/`；`scripts/` 只允许出现 Task 7 Step 0 那四个 `build_*_demo.py`（各一行落盘，PR 里已说明理由），**不许**出现其它脚本；
+- 改动只落在 `loop/`、`tests/`、`frontend/`、`docs/`、`scripts/build_*_demo.py`。
 
 - [ ] **Step 7: 提交并推送**
 
 ```bash
 cd /d/appmy/news-dataviz
-git add tests/test_step37_contract_delivery.py
-git commit -m "test(contract): P1 交付复判——几何指纹、契约合规、折行落章（P1 Task 7）"
+git add loop/compose.py scripts/build_illustrated_demo.py scripts/build_multicol_demo.py \
+        scripts/build_newspaper_demo.py scripts/build_page_demo.py \
+        tests/test_step37_contract_delivery.py
+git commit -m "test(contract): P1 交付复判 + 落盘路径接入严格写出（P1 Task 7）"
 git push -u origin frontend/pagespec-contract
 ```
 
 - [ ] **Step 8: 把 PR 描述写进交付消息**（本机无 `gh`，不能自动开 PR）
 
-交付消息里必须包含：PR 链接 https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 、本次提交范围（设计文档 `1797572` + P1 七个 Task 的提交）、`Ran 722 tests` 的实测输出、`git diff --stat main...HEAD` 的实际改动清单、以及「已知偏差」三条（`frontend/schema/` 的位置、**不改 `preview.py`**、沿用未合分支）、Review Focus 第 3 条（折行等价）的实测结论。
+交付消息里必须包含：PR 链接 https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 、本次提交范围（设计文档 `1797572` + P1 七个 Task 的提交）、`Ran 722 tests` 的实测输出、`git diff --stat main...HEAD` 的实际改动清单、以及「已知偏差」四条（`frontend/schema/` 的位置、**不改 `preview.py`**、沿用未合分支、**按 T7-A 改了 `loop/compose.py` 与四个 `scripts/build_*_demo.py` 各一行落盘代码**——理由：`dump_layout` 不接上，图纸里的 `theme` 永远是 `null`，P2 的渲染器就拿不到色板与字号），Review Focus 第 3 条（折行等价）的实测结论。
 
 ---
 

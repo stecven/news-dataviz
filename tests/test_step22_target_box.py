@@ -17,6 +17,7 @@ from loop.scaffold import build_pagespec
 from loop.selector import SEMANTIC_COMPARE, SEMANTIC_SHARE
 from loop.solve import build_skeleton, solve, validate_spec
 from loop.templates import get_template
+from tests.scratch import mkdtemp
 
 TOL = 0.01
 
@@ -60,7 +61,7 @@ class TestTargetCanvas(unittest.TestCase):
 
     def test_placeholder_card_centres_inside_the_target(self):
         r = run_selected(values=[10, 3, 2, 2, 2, 1], semantic=SEMANTIC_SHARE,
-                         out_root=os.path.join("out", "_t22chk", "fb"),
+                         out_root=mkdtemp("t22-"),
                          target_width_in=4.0, target_height_in=4.0)
         self.assertEqual(r["status"], "no_applicable")
         with open(r["pagespec"], encoding="utf-8") as f:

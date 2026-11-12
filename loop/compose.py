@@ -34,6 +34,7 @@ import sqlite3
 
 from loop.asset_lookup import (find_assets_by_semantic, find_assets_by_theme,
                                semantic_theme_terms)
+from loop.contract import dump_layout, write_layout_atomic
 from loop.data_source import DB_PATH, load_points
 from loop.layout import (CardSpec, ImageBlock, LayoutSpec, TextBlock,
                          build_card, flow_layout, page_spec_path)
@@ -544,8 +545,7 @@ def compose_page(text: str, out_dir: str, *, width_in: float = 10.0,
     os.makedirs(out_dir, exist_ok=True)
     page = flow_layout(layout, result.flow)
     result.page = page
-    with open(page_spec_path(out_dir), "w", encoding="utf-8") as fh:
-        json.dump(page.to_dict(), fh, ensure_ascii=False, indent=2)
+    write_layout_atomic(page_spec_path(out_dir), dump_layout(page))
     rendered = render_layout(page, out_dir)
     result.outputs = {"preview": rendered["preview"], "pptx": rendered["pptx"],
                       "pagelayout": page_spec_path(out_dir)}

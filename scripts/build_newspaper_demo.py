@@ -7,6 +7,7 @@ import json
 import os
 import sys
 
+from loop.contract import dump_layout, write_layout_atomic
 from loop.layout import (CardSpec, LayoutOverflowError, LayoutSpec, TextBlock,
                          flow_layout, page_spec_path)
 from loop.render_page import render_layout
@@ -44,8 +45,7 @@ def main() -> int:
 
     page = flow_layout(LayoutSpec(width_in=10.0, height_in=15.0,
                                   margin_in=0.4, gutter_in=0.3), _items())
-    with open(page_spec_path(OUT), "w", encoding="utf-8") as fh:
-        json.dump(page.to_dict(), fh, ensure_ascii=False, indent=2)
+    write_layout_atomic(page_spec_path(OUT), dump_layout(page))
     res = render_layout(page, OUT)
 
     # 溢出验证：同样的流塞进 10×6 的版面

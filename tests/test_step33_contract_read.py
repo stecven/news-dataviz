@@ -88,9 +88,16 @@ class TestContractReadEntry(unittest.TestCase):
     def test_unknown_element_key_becomes_warning_not_crash(self):
         doc = _load(AUTO_LAYOUT_FIXTURE)
         doc["cards"][0]["spec"]["elements"][0]["beep"] = 1
+        doc["cards"][0]["spec"]["elements"][1]["boop"] = 2
         result = load_layout_json(doc)
-        self.assertTrue(any("beep" in w for w in result.warnings),
-                        result.warnings)
+        # 断言**完整路径**（含 `.elements[N]` 下标）与键名，而不只是 "beep in w"：
+        # 只查键名会让「告警退化成 $.cards[0].spec、丢掉图元下标」这类回归
+        # 静默通过（Task 4 消重时就发生过一次）。两个不同下标各自成对，
+        # 顺带钉住「下标不许都写成同一个」。
+        self.assertIn("$.cards[0].spec.elements[0]: 忽略未知键 'beep'",
+                      result.warnings, result.warnings)
+        self.assertIn("$.cards[0].spec.elements[1]: 忽略未知键 'boop'",
+                      result.warnings, result.warnings)
 
     def test_geometry_is_not_translated_on_read(self):
         layout = load_layout(os.path.join(LEGACY_DIR, AUTO_LAYOUT_FIXTURE)).layout

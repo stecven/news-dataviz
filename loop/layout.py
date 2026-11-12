@@ -1031,6 +1031,18 @@ def _spec_from_dict(d: dict, where: str, warnings: list) -> PageSpec:
     写着「两处必须同步」，而给 ``PageSpec`` 加第 12 个键（``chart``）正是会漂移
     的那种改动。宽松口径全靠注入口 ``element_factory`` 实现，其余键的读法与
     ``PageSpec.from_dict`` 是同一份代码。
+
+    注入口保持 ``element_factory(e)`` 的**单参数**签名（既有
+    ``PageSpec.from_dict(doc)`` 调用方行为不变）；图元下标由本地计数器补偿，
+    所以告警路径仍是 ``$.cards[0].spec.elements[N]`` —— 少了这个下标，同一张
+    卡片有多个图元时就报不出出事的那一个。
     """
-    return PageSpec.from_dict(
-        d, element_factory=lambda e: _element_from_dict(e, where, warnings))
+    idx = 0
+
+    def _element(e: dict) -> ElementSpec:
+        nonlocal idx
+        current = idx
+        idx += 1
+        return _element_from_dict(e, f"{where}.elements[{current}]", warnings)
+
+    return PageSpec.from_dict(d, element_factory=_element)

@@ -1,0 +1,35 @@
+{
+  "out/demo/auto_layout/_plain/pagelayout.json": {
+    "sha256": "43975058695f48763db1950a9505e5bd2318e7c05ad68aeb4e73028df2e37d4d"
+  },
+  "out/demo/auto_layout/pagelayout.json": {
+    "sha256": "0b5dd6397fb0e3febb284b953e98615c0e68d4c7dc8b24cbbaf4f2febb1a2e72"
+  },
+  "out/demo/illustrated/_no_asset/pagelayout.json": {
+    "sha256": "70d3cf6fe53b0330d03b5459d4b62381e87b0beb0af2be703550eec7d02d111e"
+  },
+  "out/demo/illustrated/_spread/pagelayout.json": {
+    "sha256": "b10edce978540f329d0dd93af639f8b3be545ac5fae17c8db9459f67e262e80c"
+  },
+  "out/demo/illustrated/pagelayout.json": {
+    "sha256": "b80252a6519ae750f35252c24f1f2cba9f2ba8c6777851bef22fc4bebe441087"
+  },
+  "out/demo/multicol/_spread/pagelayout.json": {
+    "sha256": "afea5c13ee60fb850cfb68e18d6067dd11f26df27e7a1dcfd341bc0e5eabe083"
+  },
+  "out/demo/multicol/pagelayout.json": {
+    "sha256": "956c128230c68dd146b6874292f23843450be38e02b94b6cc934ba49f046d844"
+  },
+  "out/demo/page/pagelayout.json": {
+    "sha256": "b16e291bc4140d6d97dd5543d598eebcafc80298a84bf0fbbf22a6cb1189f952"
+  },
+  "out/demo/paper/pagelayout.json": {
+    "sha256": "8af86203988255dbfdd4e11df9c55f86750d5870f38a32abe2c5ab4b152723bf"
+  },
+  "out/demo/theme_match/_no_theme/pagelayout.json": {
+    "sha256": "3759afd9347f7a4a00aaa45b14d314498def8d59db8cca232dbee3792eadc29f"
+  },
+  "out/demo/theme_match/pagelayout.json": {
+    "sha256": "65d76dcd178c97504dc05a53f5b869986dc1d587ed6eae706cd4fed3c9759a5b"
+  }
+}

@@ -19,7 +19,7 @@ Spec §9 定了七个阶段：P1 契约冻结 · P2 只读渲染 · P3 编辑 ·
 1. **P1 是接口，P2 之后都是它的消费者。** 契约定死之前写渲染器，等于用一份还会变的格式写代码；定死之后，每一份后续计划都能拿 `tests/fixtures/contract/` 里的真实夹具对拍，返工最少。
 2. **P1 是唯一一处动 `loop/` 的阶段。** `CONTRIBUTING.md` 要求「一个 PR 只做一件事」，而 P1 之外的阶段只新增 `frontend/` 文件、不碰引擎，回报率更高——把它们和 P1 混在一个 PR 里会让评审看不出哪一处动了引擎。
 
-**P1 结束时应该发生的事**：契约文件存在且被两侧校验；`pagelayout.json` 带 `version: "1.0"` 和自包含的 `theme`；卡片内每个文本元素带 `lines` / `font_pt`；Python 能把图纸读回成对象；11 份历史样本的几何数字**一个字节没变**；`python -m unittest discover -s tests -t . -q` 从 676 涨到 714 全绿。
+**P1 结束时应该发生的事**：契约文件存在且被两侧校验；`pagelayout.json` 带 `version: "1.0"` 和自包含的 `theme`；卡片内每个文本元素带 `lines` / `font_pt`；Python 能把图纸读回成对象；11 份历史样本的几何数字**一个字节没变**；`python -m unittest discover -s tests -t . -q` 从 676 涨到 718 全绿。
 
 ## Global Constraints
 
@@ -32,7 +32,7 @@ Spec §9 定了七个阶段：P1 契约冻结 · P2 只读渲染 · P3 编辑 ·
 - **目录所有权**（Spec §3 C6）：本计划只许改 `loop/`、`tests/`，只许新建 `frontend/schema/` 与 `frontend/README.md` 的一节。**不许碰** `ingest/`、`assets/`、`db/`、`scripts/`（含新增文件）、`CONTRIBUTING.md`、`.gitignore`、`.gitattributes`、`.github/`。
 - **产物只写 `out/`（已 gitignore）与 `tests/fixtures/`。** 不许提交 `out/`、`db/*.bak*`、`.dev-keys/`、`scratch/`。
 - **git 纪律**：分支 `frontend/pagespec-contract`（已存在，含设计文档提交 `1797572`）。`main` 已加保护、只能经 Pull Request 合入；本机**没有 `gh` CLI**，PR 需用户自己在网页开：https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 。本计划**继续用这个分支**（理由与风险见下方「已知偏差」）。
-- **验收标准映射**：本计划覆盖 Spec §7 的 **V4**（676→714 全绿，每个 Task）、**V5**（Task 6）、**V6**（Task 6）。**V1 / V2 / V3 不在本计划**——它们要等 P2 有 JS 渲染器才能跑。
+- **验收标准映射**：本计划覆盖 Spec §7 的 **V4**（676→718 全绿，每个 Task）、**V5**（Task 6）、**V6**（Task 6）。**V1 / V2 / V3 不在本计划**——它们要等 P2 有 JS 渲染器才能跑。
 
 ### 已知偏差（执行者须知，不要"顺手修正"）
 
@@ -381,7 +381,7 @@ cd /d/appmy/news-dataviz && python -m unittest tests.test_step32_schema_check -v
 cd /d/appmy/news-dataviz && python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 688 tests` / `OK`。
+预期：`Ran 692 tests` / `OK`。
 
 - [ ] **Step 7: 提交**
 
@@ -478,7 +478,7 @@ cd /d/appmy/news-dataviz && python -m unittest tests.test_step33_contract_read -
 cd /d/appmy/news-dataviz && python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 694 tests` / `OK`。**这一关是"没动几何"的第一道自动判据**——Task 1 的指纹测试如果变红，说明 `PlacedBlock` / `PageSpec` 的 `to_dict` 被动过了，立刻回退。
+预期：`Ran 698 tests` / `OK`。**这一关是"没动几何"的第一道自动判据**——Task 1 的指纹测试如果变红，说明 `PlacedBlock` / `PageSpec` 的 `to_dict` 被动过了，立刻回退。
 
 - [ ] **Step 7: 提交**
 
@@ -579,7 +579,7 @@ python -m unittest tests.test_step34_contract_write -v
 python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 6 tests` / `OK`；全量 `Ran 700 tests` / `OK`。
+预期：`Ran 6 tests` / `OK`；全量 `Ran 704 tests` / `OK`。
 
 - [ ] **Step 7: 提交**
 
@@ -685,7 +685,7 @@ python -m unittest tests.test_step35_card_text -v
 python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 6 tests` / `OK`；全量 `Ran 706 tests` / `OK`。**注意**：`flow_layout` 现在会返回带 `lines` 的卡片，`to_dict()` 的产物会变大——Task 1 的指纹测试必须**仍然绿**（卡片内 `lines` 不进指纹）。
+预期：`Ran 6 tests` / `OK`；全量 `Ran 710 tests` / `OK`。**注意**：`flow_layout` 现在会返回带 `lines` 的卡片，`to_dict()` 的产物会变大——Task 1 的指纹测试必须**仍然绿**（卡片内 `lines` 不进指纹）。
 
 - [ ] **Step 6: 提交**
 
@@ -744,7 +744,7 @@ python -m unittest tests.test_step36_contract_guards -v
 python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 5 tests` / `OK`（其中 1 个 skip）；全量 `Ran 711 tests` / `OK (skipped=1)`。
+预期：`Ran 5 tests` / `OK`（其中 1 个 skip）；全量 `Ran 715 tests` / `OK (skipped=1)`。
 
 - [ ] **Step 5: 提交**
 
@@ -765,7 +765,7 @@ git commit -m "test(contract): V5 宽松读/严格写与 V6 主题单一来源�
 **Interfaces:**
 - Consumes: `tests/contract_fixtures.py`、`loop.contract`、`scripts/build_*_demo.py`（**只运行，不修改**）
 - Produces:
-  - `tests/test_step37_contract_delivery.py` 内定义验收常量：`EXPECTED_MIN_TESTS = 714`、`EXPECTED_CONTRACT_VERSION = "1.0"`
+  - `tests/test_step37_contract_delivery.py` 内定义验收常量：`EXPECTED_MIN_TESTS = 718`、`EXPECTED_CONTRACT_VERSION = "1.0"`
 
 - [ ] **Step 1: 写失败测试 `tests/test_step37_contract_delivery.py`**
 
@@ -815,7 +815,7 @@ python -m unittest tests.test_step31_contract_fixtures -v
 cd /d/appmy/news-dataviz && python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 714 tests` / `OK (skipped=1)`。
+预期：`Ran 718 tests` / `OK (skipped=1)`。
 
 - [ ] **Step 6: 确认工作区干净、Nothing 越界**
 
@@ -841,7 +841,7 @@ git push -u origin frontend/pagespec-contract
 
 - [ ] **Step 8: 把 PR 描述写进交付消息**（本机无 `gh`，不能自动开 PR）
 
-交付消息里必须包含：PR 链接 https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 、本次提交范围（设计文档 `1797572` + P1 七个 Task 的提交）、`Ran 714 tests` 的实测输出、`git diff --stat main...HEAD` 的实际改动清单、以及「已知偏差」三条（`frontend/schema/` 的位置、**不改 `preview.py`**、沿用未合分支）、Review Focus 第 3 条（折行等价）的实测结论。
+交付消息里必须包含：PR 链接 https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 、本次提交范围（设计文档 `1797572` + P1 七个 Task 的提交）、`Ran 718 tests` 的实测输出、`git diff --stat main...HEAD` 的实际改动清单、以及「已知偏差」三条（`frontend/schema/` 的位置、**不改 `preview.py`**、沿用未合分支）、Review Focus 第 3 条（折行等价）的实测结论。
 
 ---
 

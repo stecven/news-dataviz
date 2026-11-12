@@ -13,6 +13,10 @@ schema 描述的是**目标 1.0 契约**，不是对历史样本的描述 ——
 * 图元词汇表以外的 ``type`` 被拒                       → ``test_unknown_element_type_is_rejected``
 * 未知键只在 ``additionalProperties: false`` 处被拒     → ``test_unknown_key_rejected_only_where_additional_properties_is_false``
 * 历史样本全红，含 ``$.version`` 与 ``$.images``        → ``test_legacy_document_fails_strict_schema``
+* 非对象文档在 ``$`` 上报错（根节点有 ``type: object``）→ ``test_non_object_document_is_reported``
+* ``card.spec`` 缺 ``PageSpec.from_dict`` 硬要的键被报出 → ``test_page_missing_required_key_is_reported``
+* ``enum`` / ``default`` 的取值位不再下探               → ``test_unsupported_keywords_does_not_descend_into_opaque_values``
+* 非 ``#/$defs/`` 的 ``$ref`` 在编写期就被拦             → ``test_unsupported_keywords_rejects_cross_document_ref``
 
 本文件自带最小文档构造器 ``_minimal_doc()``，**不读** ``out/``（``out/`` 不入库，
 fresh clone 上没有它）。读已入库夹具的那条**不**跳过 —— 夹具本身就是判据。
@@ -170,6 +174,45 @@ class TestSchemaCheck(unittest.TestCase):
                 unknown = [e for e in schema_check.validate_doc(
                     _load_legacy(fixture)) if e["message"] == "unknown key"]
                 self.assertEqual(unknown, [], unknown)
+
+    def test_non_object_document_is_reported(self):
+        # 根节点有 "type": "object"，所以整份文档类型不对时错误报在 ``$`` 上；
+        # 否则 ``required`` / ``properties`` 只对 dict 生效，会静默返回 []。
+        for doc in ([], "x", 3):
+            with self.subTest(doc=doc):
+                errors = schema_check.validate_doc(doc)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertEqual(errors[0]["path"], "$")
+                self.assertIn("object", errors[0]["message"])
+
+    def test_page_missing_required_key_is_reported(self):
+        # card.spec 就是消费端（JS 渲染器）拿到的那份 PageSpec。
+        # PageSpec.from_dict（loop/models.py:70-74）对这 5 个键是硬取，
+        # 契约必须同样硬要，否则会放过一份结构性残缺的 spec。
+        doc = _minimal_doc()
+        del doc["cards"][0]["spec"]["chart_key"]
+
+        errors = schema_check.validate_doc(doc)
+
+        self.assertEqual(len(errors), 1, errors)
+        self.assertEqual(errors[0]["path"], "$.cards[0].spec.chart_key")
+        self.assertEqual(errors[0]["message"], "required key is missing")
+
+    def test_unsupported_keywords_does_not_descend_into_opaque_values(self):
+        # enum / default 的「取值」是数据不是关键字：里面出现什么键都无所谓。
+        inline = {"$defs": {"element": {"type": "object",
+                                        "default": {"kind": "thermometer"},
+                                        "enum": [{"kind": "x"}]}}}
+        self.assertEqual(schema_check.unsupported_keywords(inline), [])
+
+    def test_unsupported_keywords_rejects_cross_document_ref(self):
+        # $ref 不是「在集合里就免检」：前缀必须自己校验，只有 #/$defs/ 是允许形态。
+        bad = {"$defs": {"element": {"$ref": "other.json#/x"}}}
+        self.assertEqual(schema_check.unsupported_keywords(bad),
+                         ["$.$defs.element.$ref"])
+
+        good = {"$defs": {"element": {"$ref": "#/$defs/scale"}}}
+        self.assertEqual(schema_check.unsupported_keywords(good), [])
 
 
 if __name__ == "__main__":

@@ -13,19 +13,34 @@
 
 `SUPPORTED_KEYWORDS` 是白名单：schema 里出现任何不在其中的关键字都会被
 `unsupported_keywords()` 判为错。这样做是因为 JS 侧只打算实现这一小撮关键字，
-多一个 "支持" 的幻觉就多一处两边行为不一致的地方。
+多一个 "支持" 的幻觉就多一处两边行为不一致的地方。两个例外都在
+`unsupported_keywords()` 里单独兜住：`$ref` 的**取值**必须是同文档的
+`#/$defs/...`（跨文档引用要在编写期就报，不能留到运行时）；`enum` / `default`
+（以及不受支持的 `const`）的**取值位是数据不是关键字**，不再下探。
 """
 import json
 import os
 
 #: 校验器实现的关键字。schema 用到别的就当错误报出来 —— 宁可校验器小，
 #: 也不要出现「schema 写了、JS 却忽略」的静默漂移。
+#: 注意 `$ref` **不在**这个集合里：它是关键字，但取值受约束，由
+#: `unsupported_keywords()` 用 `_REF_KEYWORD` / `_REF_PREFIX` 单独校验，
+#: 免得「白名单里有它」就等于「写什么 $ref 都放行」。
 SUPPORTED_KEYWORDS = frozenset({
-    "$schema", "$id", "$defs", "$ref",
+    "$schema", "$id", "$defs",
     "title", "description",
     "type", "properties", "required", "additionalProperties", "items", "enum",
     "minimum", "maximum", "default",
 })
+
+#: 唯一允许的 `$ref` 形态：同一份文档内的 `$defs` 引用。
+_REF_KEYWORD = "$ref"
+_REF_PREFIX = "#/$defs/"
+
+#: 这些关键字的**取值是数据、不是 schema**：下探就会把数据里的键误报成
+#: 「不支持的关键字」（例如 `{"default": {"kind": "thermometer"}}`）。
+#: `const` 一并列在这里，是为了它将来被支持时不会再犯同一个错。
+_OPAQUE_VALUE_KEYWORDS = ("enum", "default", "const")
 
 #: `loop/` 与 `frontend/` 是仓库根下的兄弟目录，所以从这里上去两级。
 SCHEMA_PATH = os.path.join(
@@ -147,14 +162,30 @@ def unsupported_keywords(schema, path: str = "$") -> list[str]:
     `{"lines": {"type": ...}}` 里的 `type` 是关键字。所以只有当**当前节点的
     路径**不是名字槽（不以 `.properties` / `.$defs` 结尾）时，它的键才需要过
     白名单。
+
+    两处例外单独处理：
+
+    * `$ref` 的取值必须形如 `#/$defs/...`。跨文档 / 指别处的引用在这里就被
+      拦下，而不是等 `validate_doc()` 真的走到那个节点才报 —— 藏在校验器覆盖
+      不到的分支里，就等于静默存在。
+    * `enum` / `default`（以及 `const`）的取值是**数据**，不是 schema，不下探。
     """
     bad: list[str] = []
     if isinstance(schema, dict):
         in_name_slot = path.rsplit(".", 1)[-1] in _NAME_SLOTS
         for key, value in schema.items():
             child_path = f"{path}.{key}"
-            if not in_name_slot and key not in SUPPORTED_KEYWORDS:
+            if in_name_slot:                      # 这一层是名字表：键是字段名/定义名
+                bad.extend(unsupported_keywords(value, child_path))
+                continue
+            if key == _REF_KEYWORD:
+                if not (isinstance(value, str) and value.startswith(_REF_PREFIX)):
+                    bad.append(child_path)
+                continue
+            if key not in SUPPORTED_KEYWORDS:
                 bad.append(child_path)
+            if key in _OPAQUE_VALUE_KEYWORDS:
+                continue                          # 取值位不透明，不下探
             bad.extend(unsupported_keywords(value, child_path))
     elif isinstance(schema, list):
         for i, item in enumerate(schema):

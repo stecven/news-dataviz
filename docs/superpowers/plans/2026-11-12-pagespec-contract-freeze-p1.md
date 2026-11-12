@@ -19,7 +19,7 @@ Spec §9 定了七个阶段：P1 契约冻结 · P2 只读渲染 · P3 编辑 ·
 1. **P1 是接口，P2 之后都是它的消费者。** 契约定死之前写渲染器，等于用一份还会变的格式写代码；定死之后，每一份后续计划都能拿 `tests/fixtures/contract/` 里的真实夹具对拍，返工最少。
 2. **P1 是唯一一处动 `loop/` 的阶段。** `CONTRIBUTING.md` 要求「一个 PR 只做一件事」，而 P1 之外的阶段只新增 `frontend/` 文件、不碰引擎，回报率更高——把它们和 P1 混在一个 PR 里会让评审看不出哪一处动了引擎。
 
-**P1 结束时应该发生的事**：契约文件存在且被两侧校验；`pagelayout.json` 带 `version: "1.0"` 和自包含的 `theme`；卡片内每个文本元素带 `lines` / `font_pt`；Python 能把图纸读回成对象；11 份历史样本的几何数字**一个字节没变**；`python -m unittest discover -s tests -t . -q` 从 676 涨到 720 全绿。
+**P1 结束时应该发生的事**：契约文件存在且被两侧校验；`pagelayout.json` 带 `version: "1.0"` 和自包含的 `theme`；卡片内每个文本元素带 `lines` / `font_pt`；Python 能把图纸读回成对象；11 份历史样本的几何数字**一个字节没变**；`python -m unittest discover -s tests -t . -q` 从 676 涨到 722 全绿。
 
 ## Global Constraints
 
@@ -32,7 +32,7 @@ Spec §9 定了七个阶段：P1 契约冻结 · P2 只读渲染 · P3 编辑 ·
 - **目录所有权**（Spec §3 C6）：本计划只许改 `loop/`、`tests/`，只许新建 `frontend/schema/` 与 `frontend/README.md` 的一节。**不许碰** `ingest/`、`assets/`、`db/`、`scripts/`（含新增文件）、`CONTRIBUTING.md`、`.gitignore`、`.gitattributes`、`.github/`。
 - **产物只写 `out/`（已 gitignore）与 `tests/fixtures/`。** 不许提交 `out/`、`db/*.bak*`、`.dev-keys/`、`scratch/`。
 - **git 纪律**：分支 `frontend/pagespec-contract`（已存在，含设计文档提交 `1797572`）。`main` 已加保护、只能经 Pull Request 合入；本机**没有 `gh` CLI**，PR 需用户自己在网页开：https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 。本计划**继续用这个分支**（理由与风险见下方「已知偏差」）。
-- **验收标准映射**：本计划覆盖 Spec §7 的 **V4**（676→720 全绿，每个 Task）、**V5**（Task 6）、**V6**（Task 6）。**V1 / V2 / V3 不在本计划**——它们要等 P2 有 JS 渲染器才能跑。
+- **验收标准映射**：本计划覆盖 Spec §7 的 **V4**（676→722 全绿，每个 Task）、**V5**（Task 6）、**V6**（Task 6）。**V1 / V2 / V3 不在本计划**——它们要等 P2 有 JS 渲染器才能跑。
 
 ### 已知偏差（执行者须知，不要"顺手修正"）
 
@@ -72,7 +72,7 @@ Spec §9 定了七个阶段：P1 契约冻结 · P2 只读渲染 · P3 编辑 ·
 3. **卡片文本折行口径漂移。** `loop/preview.py::_draw_text`（:132）自己写了一个逐字折行循环，`loop/fit.py::_wrap_lines`（:182）也写了一个（docstring 自称「与 `preview._draw_text` 同口径」）。契约里的 `lines` 走的是 `text_flow.wrap()` → `fit._wrap_lines`，**必须与 `preview._draw_text` 在真实样本上输出完全相同的行列表**。Task 5 用真实卡片元素逐个比对；有任何一条不等就停下报告，**不许"顺手统一"**。
 4. **`lines` 是完整折行结果，不是截断后的 4 行。** `preview._draw_text` 只画 `lines[:4]`（:164，注释「盒高最多容 4 行，多余裁掉」），那是**绘制**时的裁剪，不该被写进契约。契约里的 `lines` 写全量，`font_pt` 必须等于 `palette.scaled_font_size(el.role, scale)`。钉在 Task 5 `test_lines_are_not_truncated_to_four`。
 5. **schema 与 dataclass 漂移。** schema 是契约的第二份独立描述；它唯一的价值就是「和 `loop/models.py` 说的不一样时报警」。Task 2 的白名单测试防止 schema 用到校验器不支持的关键字；Task 4 的 `test_dump_layout_output_passes_strict_schema` 防止「dataclass 加了字段、schema 没加」。两条缺一不可。
-6. **几何被"顺手"平移或取整。** `loop/layout.py:853 flatten()`（:865-879）会把卡片内相对坐标平移成页面绝对坐标并记 `_scale`——那是**渲染视图**，不是契约。`pagelayout.json` 里卡片内元素必须仍是相对坐标（实测卡片 `frame` 元素在 `(0.0, 0.0)`）。读回时**不要**反向平移、**不要**重新取整到别的位数。钉在 Task 3 `test_geometry_is_not_translated_on_read`、Task 1 `test_fingerprint_matches_baseline_for_every_document`。
+6. **几何被"顺手"平移或取整。** `loop/layout.py:933 flatten()`（:945-957）会把卡片内相对坐标平移成页面绝对坐标并记 `_scale`——那是**渲染视图**，不是契约。`pagelayout.json` 里卡片内元素必须仍是相对坐标（实测卡片 `frame` 元素在 `(0.0, 0.0)`）。读回时**不要**反向平移、**不要**重新取整到别的位数。钉在 Task 3 `test_geometry_is_not_translated_on_read`、Task 1 `test_fingerprint_matches_baseline_for_every_document`。
 
 ---
 
@@ -151,7 +151,7 @@ def fingerprint_sha(doc: dict) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 ```
 
-> 注意 `blocks` 里带了 `lines`：整版文本块的折行**本来就是契约的一部分**（`loop/layout.py:887` 早就写进 `geometry["lines"]`），它的变化会让整版高度变化，属于几何。卡片内文本的 `lines` 则**不**进指纹（新字段）。
+> 注意 `blocks` 里带了 `lines`：整版文本块的折行**本来就是契约的一部分**（`loop/layout.py:967` 早就写进 `geometry["lines"]`），它的变化会让整版高度变化，属于几何。卡片内文本的 `lines` 则**不**进指纹（新字段）。
 
 - [ ] **Step 2: 写失败测试 `tests/test_step31_contract_fixtures.py`**
 
@@ -510,7 +510,7 @@ git commit -m "feat(contract): pagelayout.json 读回入口 + 四个 from_dict�
 - Produces:
   - `loop/models.py`：
     - `PageSpec` **末尾**加 `chart: dict | None = None`，并在 `PageSpec.from_dict` 里加 `chart=d.get("chart")`
-    - `PageSpec.from_dict(cls, d, element_factory=ElementSpec)` —— 新增可选注入口，默认值保证既有调用方行为不变
+    - `PageSpec.from_dict(cls, d, element_factory=_strict_element)` —— 新增可选注入口，默认值保证既有调用方行为不变
   - `loop/layout.py`：`_spec_from_dict`（`:1027`）退化成 `PageSpec.from_dict` 的一层包装（传 `element_factory=lambda e: _element_from_dict(e, where, warnings)`），**不再是 11 键构造的复制品**
   - `loop/contract.py`：
     - `dump_layout(layout: PageLayoutSpec) -> dict` — 缺 `version` 填 `CONTRACT_VERSION`、缺 `theme` 填 `palette.summary()`；先 `validate_doc`，有错抛 `ContractError`，消息里带**前 5 条**错误路径
@@ -543,7 +543,7 @@ cd /d/appmy/news-dataviz && python -m unittest tests.test_step34_contract_write 
 
 - [ ] **Step 3: 改 `loop/models.py`（只加 `chart` 与注入口）**
 
-`chart` 放 `PageSpec` 末尾，带一行注释说明用途与"缺省 None 保证改版前的 JSON 仍能读回"（照 `frame_bbox`（:67-69）的既有写法）。`PageSpec.from_dict` 加 `chart=d.get("chart")`，并把签名改成 `from_dict(cls, d: dict, element_factory=ElementSpec)`、`elements=[element_factory(e) for e in d.get("elements", [])]`。
+`chart` 放 `PageSpec` 末尾，带一行注释说明用途与"缺省 None 保证改版前的 JSON 仍能读回"（照 `frame_bbox`（:67-69）的既有写法）。`PageSpec.from_dict` 加 `chart=d.get("chart")`，并把签名改成 `from_dict(cls, d: dict, element_factory=_strict_element)`、`elements=[element_factory(e) for e in d.get("elements", [])]`。
 
 **`ElementSpec` 的三个字段已在 Task 3 落地于 `loop/models.py:47-49`，不要碰。**
 
@@ -618,16 +618,16 @@ git commit -m "feat(contract): chart 字段 + 严格写出 + 消重构造路径�
 
 **Files:**
 - Create: `loop/card_text.py`
-- Modify: `loop/layout.py`（`flow_layout()` 构造 `PlacedCard` 处，:814-816）
+- Modify: `loop/layout.py`（`flow_layout()` 构造 `PlacedCard` 处，:894-896；`spec=spec,` 在 `:895`）
 - Test: `tests/test_step35_card_text.py`
 
 **Interfaces:**
-- Consumes: `loop.text_flow.wrap(text, style, width_in, scale=1.0)`（`text_flow.py:30`）、`loop.palette.scaled_font_size(role, scale=1.0)`（`palette.py:192`）、`loop.palette.spec_scale(spec)`（`palette.py:178`，`flatten()` 用的就是它，见 `layout.py:865`）、`loop.models.PageSpec` / `ElementSpec`
+- Consumes: `loop.text_flow.wrap(text, style, width_in, scale=1.0)`（`text_flow.py:30`）、`loop.palette.scaled_font_size(role, scale=1.0)`（`palette.py:192`）、`loop.palette.spec_scale(spec)`（`palette.py:178`，`flatten()` 用的就是它，见 `layout.py:945`）、`loop.models.PageSpec` / `ElementSpec`
 - Produces:
   - `loop/card_text.py`:
     - `wrap_element(el: ElementSpec, scale: float) -> list[str]` — `= text_flow.wrap(el.text, el.role, el.w_in, scale)`。**唯一**调用 `text_flow.wrap` 的地方。
     - `annotate_card_text(spec: PageSpec, scale: float) -> PageSpec` — 返回**新的** `PageSpec`（`dataclasses.replace`），对每个 `type == "text"` 且 `text` 为真、`w_in > 0`、`lines` 为空的元素：`lines = wrap_element(el, scale)`、`font_pt = palette.scaled_font_size(el.role, scale)`。其它元素原样带过。**幂等**：已经带 `lines` 的元素不再重算。
-    - `annotate_layout(layout: PageLayoutSpec) -> PageLayoutSpec` — 对 `layout.cards` 逐张用 `palette.spec_scale(card.spec)` 调 `annotate_card_text`。**只动卡片，不动整版 blocks**（整版块的 `lines` 早就写进 `geometry["lines"]` 了，见 `layout.py:887`）。
+    - `annotate_layout(layout: PageLayoutSpec) -> PageLayoutSpec` — 对 `layout.cards` 逐张用 `palette.spec_scale(card.spec)` 调 `annotate_card_text`。**只动卡片，不动整版 blocks**（整版块的 `lines` 早就写进 `geometry["lines"]` 了，见 `layout.py:967`）。
   - `loop/layout.py`：`flow_layout()` 里 `PlacedCard(...)`（:814）构造前，把 `spec` 换成 `card_text.annotate_card_text(spec, palette.spec_scale(spec))`。**只加这一处调用**，不改流式排版的任何高度/位置计算。
 
 ```python
@@ -708,7 +708,7 @@ python -m unittest tests.test_step35_card_text -v
 python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 6 tests` / `OK`；全量 `Ran 712 tests` / `OK`。**注意**：`flow_layout` 现在会返回带 `lines` 的卡片，`to_dict()` 的产物会变大——Task 1 的指纹测试必须**仍然绿**（卡片内 `lines` 不进指纹）。
+预期：`Ran 6 tests` / `OK`；全量 `Ran 714 tests` / `OK`。**注意**：`flow_layout` 现在会返回带 `lines` 的卡片，`to_dict()` 的产物会变大——Task 1 的指纹测试必须**仍然绿**（卡片内 `lines` 不进指纹）。
 
 - [ ] **Step 6: 提交**
 
@@ -767,7 +767,7 @@ python -m unittest tests.test_step36_contract_guards -v
 python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 5 tests` / `OK`（其中 1 个 skip）；全量 `Ran 717 tests` / `OK (skipped=1)`。
+预期：`Ran 5 tests` / `OK`（其中 1 个 skip）；全量 `Ran 719 tests` / `OK (skipped=1)`。
 
 - [ ] **Step 5: 提交**
 
@@ -788,7 +788,7 @@ git commit -m "test(contract): V5 宽松读/严格写与 V6 主题单一来源�
 **Interfaces:**
 - Consumes: `tests/contract_fixtures.py`、`loop.contract`、`scripts/build_*_demo.py`（**只运行，不修改**）
 - Produces:
-  - `tests/test_step37_contract_delivery.py` 内定义验收常量：`EXPECTED_MIN_TESTS = 720`、`EXPECTED_CONTRACT_VERSION = "1.0"`
+  - `tests/test_step37_contract_delivery.py` 内定义验收常量：`EXPECTED_MIN_TESTS = 722`、`EXPECTED_CONTRACT_VERSION = "1.0"`
 
 - [ ] **Step 1: 写失败测试 `tests/test_step37_contract_delivery.py`**
 
@@ -838,7 +838,7 @@ python -m unittest tests.test_step31_contract_fixtures -v
 cd /d/appmy/news-dataviz && python -m unittest discover -s tests -t . -q
 ```
 
-预期：`Ran 720 tests` / `OK (skipped=1)`。
+预期：`Ran 722 tests` / `OK (skipped=1)`。
 
 - [ ] **Step 6: 确认工作区干净、Nothing 越界**
 
@@ -864,7 +864,7 @@ git push -u origin frontend/pagespec-contract
 
 - [ ] **Step 8: 把 PR 描述写进交付消息**（本机无 `gh`，不能自动开 PR）
 
-交付消息里必须包含：PR 链接 https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 、本次提交范围（设计文档 `1797572` + P1 七个 Task 的提交）、`Ran 720 tests` 的实测输出、`git diff --stat main...HEAD` 的实际改动清单、以及「已知偏差」三条（`frontend/schema/` 的位置、**不改 `preview.py`**、沿用未合分支）、Review Focus 第 3 条（折行等价）的实测结论。
+交付消息里必须包含：PR 链接 https://github.com/stecven/news-dataviz/pull/new/frontend/pagespec-contract 、本次提交范围（设计文档 `1797572` + P1 七个 Task 的提交）、`Ran 722 tests` 的实测输出、`git diff --stat main...HEAD` 的实际改动清单、以及「已知偏差」三条（`frontend/schema/` 的位置、**不改 `preview.py`**、沿用未合分支）、Review Focus 第 3 条（折行等价）的实测结论。
 
 ---
 

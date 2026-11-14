@@ -20,6 +20,7 @@ import {
   boxPxTrunc,
   cardScale,
   lineHeightPx,
+  pageScale,
   pxFromIn,
   pxFromPt,
   pyRound,
@@ -188,6 +189,44 @@ describe('units: 基线（Pillow getmetrics()[0] 等价）', () => {
     ];
     for (const [px, expected] of cases) {
       expect(ascentPx(px), `ascentPx(${px})`).toBe(expected);
+    }
+  });
+});
+
+describe('units: 画布缩放比（pageScale，对齐 palette.canvas_scale）', () => {
+  it('page_scale_is_min_of_the_two_dimension_ratios', () => {
+    // 基准画布 10×6 的三档实测值（来自 loop/palette.py::canvas_scale）：
+    //   10×15 → min(1.0, 2.5) = 1.0（demo 稿就是这一档，字号一个都不变）
+    //   20×12 → min(2.0, 2.0) = 2.0（title 20→40，随后被钳到 24）
+    //    8.5×11 → min(0.85, 1.8333…) = 0.85（取小的一维）
+    expect(pageScale(10, 15)).toBe(1);
+    expect(pageScale(20, 12)).toBe(2);
+    expect(pageScale(8.5, 11)).toBe(0.85);
+    // 只放大宽：min(20/10, 6/6) = 1，字号不许跟着溢出高度那一维
+    expect(pageScale(20, 6)).toBe(1);
+  });
+
+  it('page_scale_falls_back_to_one_when_a_dimension_is_missing_or_zero', () => {
+    // 对齐 loop/palette.py::canvas_scale 的兜底（任一维 ≤ 0 → 1.0）
+    expect(pageScale(0, 11)).toBe(1);
+    expect(pageScale(10, 0)).toBe(1);
+    expect(pageScale(-10, 11)).toBe(1);
+    expect(pageScale(undefined, undefined)).toBe(1);
+    expect(pageScale(null, 12)).toBe(1);
+  });
+
+  it('page_scale_honours_an_explicit_base_canvas', () => {
+    // 基准画布换成 8×5：min(8/8, 5/5) = 1；min(16/8, 10/5) = 2
+    expect(pageScale(8, 5, [8, 5])).toBe(1);
+    expect(pageScale(16, 10, [8, 5])).toBe(2);
+  });
+
+  it('cardScale_是_pageScale_的卡片版（同一套判据，不另写逻辑）', () => {
+    // 同一组数字两条路必须同值，否则将来改一处会漂。
+    const cases = [[6.072, 3.37654], [9.2, 4.97], [4.5, 2.84], [20, 6]];
+    for (const [w, h] of cases) {
+      expect(cardScale({ w_in: w, h_in: h }, [10, 6]))
+        .toBe(pageScale(w, h, [10, 6]));
     }
   });
 });

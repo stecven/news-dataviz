@@ -15,6 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { renderPage } from '../src/render/stage.js';
+import { renderText } from '../src/render/text.js';
 import { mountPage } from '../src/index.js';
 import {
   ascentPx, lineHeightPx, pxFromPt, roundPx,
@@ -280,6 +281,99 @@ describe.skipIf(!AUTO)('renderPage：整版块（text-anchor 三档 + 无 dy）'
   });
 });
 
+describe.skipIf(!AUTO)('renderPage：整版块字号按画布缩放并钳位（对齐 scaled_font_size）', () => {
+  it('页 20×12（scale=2.0）时标题字号钳到上限 24，不是 40', () => {
+    // Python: canvas_scale(20, 12) = min(20/10, 12/6) = 2.0；title 20 × 2 = 40
+    // → scaled_font_size 钳到 MAX_FONT_PT=24。不钳的话这里会是 pxFromPt(40)=56。
+    // 只改内存副本的页尺寸，**不动**金样本文件。
+    const doc = JSON.parse(JSON.stringify(AUTO));
+    doc.width_in = 20;
+    doc.height_in = 12;
+    const { svg } = render(doc);
+    const block = doc.blocks[0];
+    expect(block.style).toBe('title');
+    const node = textsOf(svg, block.name)[0];
+    expect(node.getAttribute('font-size')).toBe(String(pxFromPt(24)));
+    // 对照组：没有钳位时它会是多少 —— 证明这条确实在测钳位
+    expect(String(pxFromPt(40))).not.toBe(String(pxFromPt(24)));
+  });
+
+  it('页 10×15（scale=1.0）但 theme.font_sizes.body=30 时正文也钳到 24', () => {
+    // 这条钉的是「钳位不只对放大生效」：字号表本身超上限时同样要收进 [6,24]。
+    const doc = JSON.parse(JSON.stringify(AUTO));
+    doc.theme.font_sizes.body = 30;
+    const { svg } = render(doc);
+    const block = doc.blocks[1];
+    expect(block.style).toBe('body');
+    const node = textsOf(svg, block.name)[0];
+    expect(node.getAttribute('font-size')).toBe(String(pxFromPt(24)));
+  });
+
+  it('缩小时字号跟着缩小，但不会低于下限 6（8.5×11 → scale 0.85）', () => {
+    // canvas_scale(8.5, 11) = min(0.85, 1.8333…) = 0.85（评审报告写的 0.917 算错了）。
+    // note 8 × 0.85 = 6.8 pt，仍在 [6,24] 内 —— 只验缩放本身生效。
+    const doc = JSON.parse(JSON.stringify(AUTO));
+    doc.width_in = 8.5;
+    doc.height_in = 11;
+    doc.theme.font_sizes.note = 7;
+    doc.blocks = [{
+      name: 'b_scaled_note',
+      style: 'note',
+      align: 'left',
+      x_in: 0.4,
+      y_in: 1.175,
+      w_in: 9.2,
+      h_in: 0.2,
+      lines: ['缩放后的一行'],
+      columns: 1,
+      column_gutter_in: 0,
+    }];
+    doc.cards = [];
+    doc.images = [];
+    const { svg } = render(doc);
+    const node = textsOf(svg, 'b_scaled_note')[0];
+    // 7 × 0.85 = 5.95 → 钳到下限 6 → pxFromPt(6) = 8
+    expect(node.getAttribute('font-size')).toBe(String(pxFromPt(6)));
+
+    // 同一条链路的另一侧：note 取 20 时 20 × 0.85 = 17（未触钳位）
+    const doc2 = JSON.parse(JSON.stringify(doc));
+    doc2.theme.font_sizes.note = 20;
+    const node2 = textsOf(render(doc2).svg, 'b_scaled_note')[0];
+    expect(node2.getAttribute('font-size')).toBe(String(pxFromPt(17)));
+  });
+
+  it('卡片元素的 font_pt 不受画布缩放影响（契约冻结值不二次缩放）', () => {
+    // 页放大到 20×12 时，卡片里 `<text>` 的 font-size 必须逐字不变。
+    const base = render(AUTO).svg.querySelector('[data-card-name]');
+    const doc = JSON.parse(JSON.stringify(AUTO));
+    doc.width_in = 20;
+    doc.height_in = 12;
+    const scaled = render(doc).svg.querySelector('[data-card-name]');
+    expect(scaled.outerHTML).toBe(base.outerHTML);
+  });
+});
+
+describe('renderText：opts.box 必须是长度 4 的有限数值数组', () => {
+  const theme = AUTO ? createTheme(AUTO.theme) : null;
+  const el = { id: 'x', type: 'text', role: 'body', x_in: 0, y_in: 0, w_in: 1, h_in: 1 };
+
+  it.skipIf(!AUTO)('合法的四元组不抛', () => {
+    expect(() => renderText(document.createElement('div'), el, {
+      theme, mode: 'block', box: [40, 123, 960, 150], noDy: true,
+    })).not.toThrow();
+  });
+
+  it.skipIf(!AUTO)('长度不对 / 含非有限数 / 不是数组 一律抛（不许静默画垃圾）', () => {
+    const bad = [[40, 123], [40, 123, 960, 150, 999], [40, NaN, 960, 150],
+      [40, Infinity, 960, 150], [40, '123', 960, 150], '0 0 10 10', {}, 42];
+    for (const box of bad) {
+      expect(() => renderText(document.createElement('div'), el, {
+        theme, mode: 'block', box, noDy: true,
+      }), `box=${JSON.stringify(box)}`).toThrow(/opts\.box/);
+    }
+  });
+});
+
 describe.skipIf(!MULTICOL)('renderPage：多栏整版块逐栏渲染（R44 修订口径）', () => {
   it('两栏块产出 4 个 text 节点，两栏各自从 40 / 510 起排', () => {
     const { svg, warnings } = render(MULTICOL);
@@ -327,6 +421,22 @@ describe.skipIf(!MULTICOL)('renderPage：多栏整版块逐栏渲染（R44 修�
     expect(nodes.length).toBe(1);
     expect(nodes[0].textContent).toBe('只有 lines');
     expect(nodes[0].getAttribute('x')).toBe('40');
+  });
+});
+
+describe.skipIf(!MULTICOL)('renderPage：卡片尺寸走 trunc（919 这张卡是唯一分水岭）', () => {
+  it('_spread 的 heat_ratio_top5 卡宽 919（不是 round 的 920）', () => {
+    // 9.2*100 === 919.9999999999999 —— Python int() 截断得 919，int(round()) 得 920。
+    // **只有这张卡**能区分 trunc/round：同一份图纸里另外两张卡是 4.5in（450 整），
+    // auto_layout 的卡是 6.072in（607.2，两套口径同为 607）。把这行数字钉住，
+    // 谁把 `renderCard` 的 `truncPx` 换成 `roundPx` 就会在这里红。
+    expect(9.2 * 100).toBe(919.9999999999999);
+    const { svg } = render(MULTICOL);
+    const card = svg.querySelector('[data-card-name="heat_ratio_top5"]');
+    expect(card).not.toBeNull();
+    expect(card.getAttribute('width')).toBe('919');
+    expect(card.getAttribute('height')).toBe('497');
+    expect(card.getAttribute('viewBox')).toBe('0 0 919 497');
   });
 });
 
@@ -503,6 +613,26 @@ describe.skipIf(!AUTO)('mountPage：公开 API', () => {
     expect(seen[0]).toContain('images');
   });
 
+  it("on('warning') 也转发渲染期的 warning（卡片缺 spec），不只 normalize 那几条", () => {
+    // 评审 Critical：`renderPage` 的 warnings 以前从未被 `mountPage` 读取，于是
+    // 「卡片缺 spec.elements」这条降级在公开 API 上**一条都收不到**。
+    // 这里故意只删 spec、不动任何其它字段：normalize 阶段是干净的，收到的这条
+    // 只可能来自渲染阶段。
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    hosts.push(host);
+    const doc = JSON.parse(JSON.stringify(AUTO));
+    delete doc.cards[0].spec;
+    const api = mountPage(host, doc);
+    const seen = [];
+    api.on('warning', (message) => seen.push(message));
+    expect(seen.length).toBeGreaterThan(0);
+    // 不绑死全句：只要求点出 `spec`（消息文案将来改词不算红）
+    expect(seen.some((message) => message.includes('spec'))).toBe(true);
+    // 现有的 normalize 警告（这里没有）与渲染警告合起来才是一份完整清单
+    expect(seen.join('\n')).toContain(doc.cards[0].name);
+  });
+
   it("on() 对 P3 才有的类型不抛（change/exportSVG 只是留注释）", () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -512,7 +642,7 @@ describe.skipIf(!AUTO)('mountPage：公开 API', () => {
     expect(() => api.on('exportSVG', () => {})).not.toThrow();
   });
 
-  it('destroy() 摘掉 svg，之后再用会抛', () => {
+  it('destroy() 摘掉 svg，之后再用会抛；重复 destroy() 是安全的', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     hosts.push(host);
@@ -520,6 +650,8 @@ describe.skipIf(!AUTO)('mountPage：公开 API', () => {
     api.destroy();
     expect(host.querySelector('svg')).toBeNull();
     expect(() => api.on('warning', () => {})).toThrow(/destroy/i);
+    // 第二次 destroy 必须静默返回（调用方常在 cleanup / unmount 里无条件调一次）
+    expect(() => api.destroy()).not.toThrow();
   });
 
   it('theme 缺失时 mountPage 抛（不静默）', () => {

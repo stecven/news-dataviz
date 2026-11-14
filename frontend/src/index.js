@@ -43,7 +43,13 @@ export function mountPage(container, doc, opts = {}) {
   }
 
   const rendered = renderPage(container, normalized, opts);
-  warnings.forEach((message) => emit('warning', message));
+  // **两份警告都要转发**：`normalizeDoc` 报的是"图纸怎么被宽松读的"（缺 `version`
+  // / `images` …），`renderPage` 报的是"画的时候降级了什么"（卡片缺 `spec.elements`、
+  // 插图取不到资源 …）。只收前者会让渲染期的降级**彻底静默**——而 `on('warning')`
+  // 是 v1 唯一的公开降级通道。顺序保持「先 normalize 后 render」，与发生顺序一致。
+  const allWarnings = warnings.concat(rendered.warnings || []);
+
+  allWarnings.forEach((message) => emit('warning', message));
 
   return {
     svg: rendered.svg,
@@ -62,9 +68,8 @@ export function mountPage(container, doc, opts = {}) {
       }
       // 补发挂载阶段就已经产生的警告：调用方拿到句柄时这些事已经发生了，
       // 若只发"未来的"，`on('warning')` 就会静默漏掉最该看的那几条。
-      if (type === 'warning') {
-        warnings.forEach((message) => fn(message));
-      }
+      // 补发的是**合集**（normalize + render），两者缺一都会让降级静默。
+      if (type === 'warning') allWarnings.forEach((message) => fn(message));
       if (!listeners.has(type)) listeners.set(type, []);
       listeners.get(type).push(fn);
       return fn;

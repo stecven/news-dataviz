@@ -15,7 +15,7 @@
  * `dominant-baseline="text-before-edge"`：实测它会在浏览器里相对升部再漂一整行高。
  */
 import {
-  PX_PER_IN, ascentPx, boxPxTrunc, lineHeightPx, pxFromPt,
+  PX_PER_IN, ascentPx, boxPxTrunc, lineHeightPx, pxFromPt, pyRound,
 } from '../units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -37,8 +37,10 @@ function normalizeAlign(raw) {
  * `card` 模式：行来自 `el.lines`（契约冻结的排版结果）；0.x 老样本没有 `lines`，
  * 退回把 `el.text` 当唯一一行，**不崩**。
  *
- * `block` 模式：行来自 `geometry.lines`（整版块的换行结果是排版阶段算好的，
- * 分栏在 `geometry.line_groups`，本轮不消费），`el.lines` 与 `el.text` 依次兜底。
+ * `block` 模式：行来自 `geometry.lines`（整版块的换行结果是排版阶段算好的）。
+ * `stage.js::renderBlock` 已经把 `block.line_groups` 拆成逐栏的 `lines` 传进来
+ * —— 分栏在这里是**已消费**的，不需要再读 `line_groups`。`el.lines` 与
+ * `el.text` 依次兜底。
  */
 function linesFor(el, mode) {
   const geometry = el && el.geometry && typeof el.geometry === 'object' ? el.geometry : null;
@@ -62,13 +64,30 @@ function linesFor(el, mode) {
 /**
  * 按 `mode` 取字号（磅）。
  *
+ * **`block` 模式带画布缩放与钳位**：整版块的字号跟着画布走（对齐
+ * `loop/palette.py::scaled_font_size`）——先乘 `opts.pageScale`，保留两位小数
+ * （尾差修掉，否则 16.0 会落成 15.99），再钳进 `theme.fontPtClamp()` 的上下限。
+ * 不做这一步的话，画布放大到两倍时字号纹丝不动，「大卡片小字」就是从这里来的。
+ * **`card` 模式不缩放、不钳位**：卡片元素的字号是契约冻结值，缩放是排版阶段
+ * 的职责，渲染器再动一次就与冻结结果错开。
+ *
  * `font_pt` 缺省（`null` / `undefined` / `''`）时**直接抛**：`Number(null)` 与
  * `Number('')` 都是 0，过去会让 `Number.isFinite` 放行，于是静默把字号画成零
  * —— 文字彻底不可见，而且不报错、不留痕。宁可崩在调用点。
  * **`font_pt = 0` 不抛**：0 是合法数值，是否可见由排版阶段负责。
  */
-function fontPtFor(el, theme, mode) {
-  if (mode === 'block') return theme.fontPt(el.role);
+function fontPtFor(el, theme, mode, pageScale = 1) {
+  if (mode === 'block') {
+    const scale = Number(pageScale);
+    if (!Number.isFinite(scale)) {
+      throw new Error(
+        `renderText: opts.pageScale 必须是有限数值，实际是 ${JSON.stringify(pageScale)}`,
+      );
+    }
+    const scaled = pyRound(Number(theme.fontPt(el.role)) * scale * 100) / 100;
+    const [lower, upper] = theme.fontPtClamp();
+    return Math.max(Number(lower), Math.min(Number(upper), scaled));
+  }
   const raw = el == null ? undefined : el.font_pt;
   if (raw == null || raw === '') {
     throw new Error(
@@ -91,7 +110,10 @@ function fontPtFor(el, theme, mode) {
  *
  * @param {SVGElement} parent 挂载点（通常是卡片的内嵌 `<svg>`）
  * @param {object} el 契约里的 text 元素
- * @param {{theme: object, pxPerIn?: number, mode?: 'card'|'block'}} opts
+ * @param {{theme: object, pxPerIn?: number, mode?: 'card'|'block',
+ *          box?: number[], noDy?: boolean, pageScale?: number}} opts
+ *   `box` 是页口径的像素四元组 `[x0, y0, x1, y1]`（整版块用）；`noDy` 关掉左对齐
+ *   的竖直居中；`pageScale` 只在 `block` 模式下参与字号缩放（缺省 1）。
  * @returns {SVGGElement} 含至多 `MAX_LINES` 个 `<text>`；`<g>` 与每个 `<text>`
  *   都带 `data-el-id`（T5 的结构对拍靠它定位）
  */
@@ -115,8 +137,21 @@ export function renderText(parent, el, opts = {}) {
   const align = normalizeAlign(geometry && geometry.align);
   // `opts.box` 是已经取整好的像素四元组 `[x0, y0, x1, y1]`：整版块用它在**页**口径
   // 落位（`roundPx`），卡片用 `boxPxTrunc`。给了就不再按元素自己的英寸盒重算。
-  const [x0, y0, x1, y1] = opts.box != null ? opts.box : boxPxTrunc(el);
-  const fontPt = fontPtFor(el, theme, mode);
+  // 校验是**必须**的：缺一项会让解构出 `undefined`（属性变成字面量 "undefined"），
+  // 含 `NaN` 的会画到画布外，而这两种情况都不抛、只在肉眼上"看起来怪"。
+  const box = opts.box;
+  if (box != null) {
+    const ok = Array.isArray(box) && box.length === 4
+      && box.every((value) => typeof value === 'number' && Number.isFinite(value));
+    if (!ok) {
+      throw new Error(
+        `renderText: 元素 ${JSON.stringify(el && el.id)} 的 opts.box 必须是长度 4 的`
+        + ` 有限数值数组 [x0, y0, x1, y1]，实际是 ${JSON.stringify(box)}`,
+      );
+    }
+  }
+  const [x0, y0, x1, y1] = box != null ? box : boxPxTrunc(el);
+  const fontPt = fontPtFor(el, theme, mode, opts.pageScale);
   const px = pxFromPt(fontPt);
   const lineH = lineHeightPx(fontPt);
   const lines = linesFor(el, mode);

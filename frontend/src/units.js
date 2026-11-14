@@ -153,17 +153,35 @@ export function ascentPx(px) {
 }
 
 /**
- * 卡片相对基准画布的缩放比：``min(w/baseW, h/baseH)``，任一维 ≤ 0 时兜底 1。
+ * 相对基准画布的缩放比：``min(w/baseW, h/baseH)``，任一维 ≤ 0 时兜底 1。
  *
  * 取**小**的那一维：只放大宽（或只放大高）时，字号不许跟着放大到溢出另一维。
  * 对齐 ``loop/palette.py::canvas_scale``；基准画布默认 ``[10, 6]``（英寸），
  * 与 ``theme.base_canvas_in`` 的缺省一致，调用方可以显式传入图纸里的值。
+ *
+ * **不参与取整**：这个比值直接乘在字号上，四舍五入发生在乘完之后（见
+ * `render/text.js::fontPtFor`）。先取整再乘会和 Python 侧的分步口径错开。
+ *
+ * @param {number} widthIn 画布宽（英寸）
+ * @param {number} heightIn 画布高（英寸）
+ * @param {number[]} [baseCanvasIn] 基准画布（英寸），缺省 `[10, 6]`
+ * @returns {number} 缩放比；任一维 ≤ 0（或缺失）时返回 1
  */
-export function cardScale(card, baseCanvasIn = [10, 6]) {
-  const w = Number(card && card.w_in) || 0;
-  const h = Number(card && card.h_in) || 0;
+export function pageScale(widthIn, heightIn, baseCanvasIn = [10, 6]) {
+  const w = Number(widthIn) || 0;
+  const h = Number(heightIn) || 0;
   if (w <= 0 || h <= 0) return 1;
   const baseW = Number(baseCanvasIn && baseCanvasIn[0]) || 10;
   const baseH = Number(baseCanvasIn && baseCanvasIn[1]) || 6;
   return Math.min(w / baseW, h / baseH);
+}
+
+/**
+ * 卡片相对基准画布的缩放比 —— 与 {@link pageScale} 同一套判据，只是入参换成
+ * 卡片自己的宽高（``w_in`` / ``h_in``）。
+ *
+ * 单独留这个入口而不是让调用方自己拆字段：T5 的卡片结构对拍会用到它。
+ */
+export function cardScale(card, baseCanvasIn = [10, 6]) {
+  return pageScale(card && card.w_in, card && card.h_in, baseCanvasIn);
 }

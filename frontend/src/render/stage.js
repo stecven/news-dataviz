@@ -14,7 +14,7 @@
  * 贴在 `y=239`（`2.3875*100 = 238.75`）。所以这里绝不"统一"成一种。
  */
 import {
-  PX_PER_IN, boxPxTrunc, pyRound, roundPx, truncPx,
+  PX_PER_IN, boxPxTrunc, pageScale as pageScaleOf, pyRound, roundPx, truncPx,
 } from '../units.js';
 import { createTheme } from '../theme.js';
 import { normalizeDoc } from '../doc.js';
@@ -133,9 +133,12 @@ function renderBlock(parent, block, ctx) {
   for (let k = 0; k < count; k += 1) {
     const x0 = roundPx(Number(block.x_in) + k * (inner + gutter));
     const x1 = roundPx(Number(block.x_in) + k * (inner + gutter) + inner);
-    // `mode: 'block'` 取字号走 `theme.fontPt(block.style)`（设计角色直查）；
-    // `box` 直接给页口径的取整像素，`noDy` 关掉卡片那套竖直居中 —— 整版块从
-    // 块顶 + 0.05in 起排，没有 dy（对齐 `loop/render_page.py::_draw_block`）。
+    // `mode: 'block'` 取字号走 `theme.fontPt(block.style)`（设计角色直查），再按
+    // `ctx.pageScale` 缩放并钳进 `theme.fontPtClamp()`（对齐
+    // `loop/palette.py::scaled_font_size`）——字号必须跟着画布走，否则整版放大
+    // 一倍时块文字还是原尺寸。`box` 直接给页口径的取整像素，`noDy` 关掉卡片那套
+    // 竖直居中 —— 整版块从块顶 + 0.05in 起排，没有 dy（对齐
+    // `loop/render_page.py::_draw_block`）。
     renderText(parent, {
       id: block.name,
       role: block.style,
@@ -145,6 +148,7 @@ function renderBlock(parent, block, ctx) {
       mode: 'block',
       box: [x0, y0, x1, y0 + Number(block.h_in) * PX_PER_IN],
       noDy: true,
+      pageScale: ctx.pageScale,
     });
   }
 }
@@ -254,9 +258,16 @@ export function renderPage(container, doc, opts = {}) {
   svg.appendChild(background);
 
   const assetsBase = opts.assetsBase == null ? DEFAULT_ASSETS_BASE : String(opts.assetsBase);
+  // 整版块的字体缩放比：画布相对**基准画布**的比例（`loop/palette.py::canvas_scale`），
+  // 基准取自图纸的 `theme.base_canvas_in`（缺省 10×6）。只影响 block 模式的字号，
+  // 与卡片元素冻结的 `font_pt` 无关 —— 也**不许**混进任何坐标取整。
+  const pageScale = pageScaleOf(
+    Number(page.width_in), Number(page.height_in), theme.baseCanvasIn(),
+  );
   const ctx = {
     theme,
     mode: 'card',
+    pageScale,
     // R47：没给 `resolveAsset` 就按 `assetsBase + '/' + path` 拼，`path` 用原文。
     // 给了就**原样转发原文**（不预先拼接），调用方自己决定怎么落成 URL。
     resolveAsset: typeof opts.resolveAsset === 'function'
@@ -282,7 +293,12 @@ export function renderPage(container, doc, opts = {}) {
   return { svg, warnings };
 }
 
-/** 内部用，给测试/调试留一个口：卡片盒的截断像素（尺寸口径）。 */
+/**
+ * 内部用，给测试/调试留一个口：卡片盒的截断像素（尺寸口径）。
+ *
+ * T5 的卡片结构对拍会用到它（卡片尺寸走 `truncPx`、位置走 `roundPx`，两套口径
+ * 不能混）。
+ */
 export function cardBoxPx(card) {
   return {
     x: roundPx(card.x_in),
@@ -292,7 +308,11 @@ export function cardBoxPx(card) {
   };
 }
 
-/** 内部用：元素盒（截断口径），主要是为了让调试脚本能复用同一套取整。 */
+/**
+ * 内部用：元素盒（截断口径），主要是为了让调试脚本能复用同一套取整。
+ *
+ * T5 的元素结构对拍会用到它。
+ */
 export function elementBoxPx(el) {
   return boxPxTrunc(el);
 }

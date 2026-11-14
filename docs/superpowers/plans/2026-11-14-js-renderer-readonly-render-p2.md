@@ -27,7 +27,7 @@ Python 侧（`loop/`、`tests/`）**一行都不许改**。P2 全部落在 `fron
 3. **取整口径分两处，不能混**：
    - 单卡 `render_preview`（`loop/preview.py:51`）：画布与元素 box 都用 **`int()` 截断** → JS 用 `Math.trunc`。
    - 整版 `compose_preview`（`loop/render_page.py:148`）：画布、卡片贴图位置、`_draw_block` 的 x/y 都用 **`int(round())`** → JS 用 `Math.round`。
-   - **但 `int(round(x))` 不是 `Math.round(x)`**：Python 的 `round()` 是 **half-to-even（银行家舍入）**，`Math.round` 是 half-up。实测真实产物里落 `.5` 的地方会分叉：`pxFromPt(9.0)`（= `9*100/72 = 12.5`）Python 得 **12**、JS 得 13，全 11 份夹具有 **12 个 `title` 元素**用 `font_pt = 9.0`；`roundPx(1.065)`（= `106.5`）Python 得 **106**、JS 得 107，有 **5 张插图的 `rect[1]`** 是 `1.065`。所以 `pxFromPt` / `roundPx` / `lineHeightPx` 一律走 `pyRound(x)`（half-to-even），`truncPx` / `boxPxTrunc` 仍走 `Math.trunc`。判据：`pxFromPt(9) === 12`、`roundPx(1.065) === 106`、`roundPx(0.5625) === 56`（Python `int(round(56.5))` 也取偶）。
+   - **但 `int(round(x))` 不是 `Math.round(x)`**：Python 的 `round()` 是 **half-to-even（银行家舍入）**，`Math.round` 是 half-up。实测真实产物里落 `.5` 的地方会分叉：`pxFromPt(9.0)`（= `9*100/72 = 12.5`）Python 得 **12**、JS 得 13，全 11 份夹具有 **12 个 `title` 元素**用 `font_pt = 9.0`；`roundPx(1.065)`（= `106.5`）Python 得 **106**、JS 得 107，有 **5 张插图的 `rect[1]`** 是 `1.065`。所以 `pxFromPt` / `roundPx` / `lineHeightPx` 一律走 `pyRound(x)`（half-to-even），`truncPx` / `boxPxTrunc` 仍走 `Math.trunc`。判据：`pxFromPt(9) === 12`、`roundPx(1.065) === 106`、`roundPx(1.825) === 182`。（**别用 `0.5625`**：`0.5625*100 = 56.25` 不落中点，两种口径都 56，验不出东西。）
 4. **先画形状，后画文字**（`loop/preview.py:39 _render_order`）。半圆 sector 是整圆 PIE 的 180° 楔形，bbox 覆盖整个下半平面，先画文字会被盖掉。
 5. **文字优先用契约里冻结的 `lines` 与 `font_pt`**（spec D10）。`loop/preview.py::_draw_text` 是现场重新折行、字号从 role 重算的，**不要照抄那部分**；只有 `lines` 为空的老样本才退回按 `text` 折行。
 6. **最多画 4 行**（`loop/preview.py:164` 的 `lines[:4]`）。契约里的 `lines` 可能长于 4 行，JS 必须同样截断到 4 行，多出来的不画。

@@ -39,6 +39,8 @@ Python 侧（`loop/`、`tests/`）**一行都不许改**。P2 全部落在 `fron
 12. **`node_modules` 不入库**：新建 `frontend/.gitignore`（不要动仓库根的 `.gitignore`，那是高危文件）。
 13. **不改 `loop/`、`tests/`、`ingest/`、`assets/`、`db/`、`CONTRIBUTING.md`、`.gitignore`、`.gitattributes`、`.github/`**（spec C6 + CODEOWNERS）。
 14. **Python 全量测试必须一直绿**：`python -m unittest discover -s tests -t . -q` → `Ran 722 tests` / `OK`。注意：**T1 之前**是 `OK (skipped=1)`，那次 skip 就是 V6 guard（`frontend/src` 还不存在）；**T1 一建 `frontend/src/`，guard 立刻真跑，skip 数从 1 变 0**。测试总数 722 始终不变。任何 Task 里若看到 `skipped=1` 或总数变动，都是错的。
+15. **整版块字号要按画布缩放并钳位**（`loop/palette.py::scaled_font_size` + `canvas_scale`）。`pt = max(6, min(24, round(font_size(style) * page_scale, 2)))`，`page_scale = min(width_in/baseW, height_in/baseH)`（基准取 `theme.base_canvas_in`，任一维 ≤0 返 1）。11 份样本恒 10×15 ⇒ `page_scale = 1.0` ⇒ 期望值不变（title 28px / body 15px）。卡片内文字**不走这条**：卡片的 `font_pt` 已是契约冻结值。
+16. **`mountPage.on('warning')` 必须覆盖两个阶段**：`normalizeDoc` 的读契约警告 **和** `renderPage` 的渲染期降级警告（缺 `spec.elements`、插图资源取不到、`chart`/未知 type 占位）。只转发前者会让 v1 唯一的公开降级通道在"最该看见的地方"失效。
 
 ### 已知偏差（执行者须知，不要"顺手修正"）
 
@@ -399,20 +401,27 @@ git commit -m "feat(frontend): 整版渲染骨架与 mountPage 公开 API（P2 T
 - Test: `frontend/test/v1-structure.test.mjs`
 
 **Interfaces:**
-- Consumes: `renderPage`、夹具 `out/demo/auto_layout/pagelayout.json`
-- Produces: `svgwalk.mjs`：`collectByElId(svg) -> Map<elId, SVGElement[]>`、`attrToInch(node, attr) -> number`；`golden.mjs`：`goldenDoc(relPath) -> object|null`（不存在返回 `null`）
+- Consumes: `renderPage`、夹具 `out/demo/**/pagelayout.json`（11 份）
+- Produces: `svgwalk.mjs`：`collectByElId(svg) -> Map<string, SVGElement[]>`（**键是卡片定域的**，见下）、`attrToInch(node, attr) -> number`、`boxOf(nodes) -> [x0,y0,x1,y1]|null`；`golden.mjs`：`goldenDoc(relPath) -> object|null`、`demoLayoutPaths() -> string[]`（排序、缺失返回 `[]`）
 
 - [ ] **Step 1: 写失败测试（V1）**
 
+- **`collectByElId` 的键必须带卡片名**（实测缺陷，务必照做）：`frame`/`title_band`/`title`/`scale_note` 这四个 id **在每张卡片里都各有一个**（`auto_layout` 54 个卡片元素 / 4 个重复 id；11 份样本里凡 ≥2 卡的全部 `dups=4`）。按裸 `elId` 建索引会把卡1 的 `frame`(0,0,607,337) 与卡2 的 `frame`(0,0,607,496) 合并成 union bbox `[0,0,607,496]` → 假 FAIL。
+  签名定为 `collectByElId(svg) -> Map<key, SVGElement[]>`，`key` 规则：卡片内元素 = `` `${cardName}\u0000${elId}` ``（遍历 `[data-card-name]` 容器取 `data-card-name`），页面级块/插图 = `elId` 本身。docstring 写上这条实测例子。
 - 节点总数：**口径是「DOM 里带 `data-el-id` 的节点数」，且必须由公式推导，不许只写死总数。**
-  - 推导公式（每个元素按其 `type`/`role` 累加）：形状元素（`rect` 非 track / `ellipse` / `arc` / `image`）各 **1** 个节点；`role='track'` **2** 个（矩形 + 下半圆 `<path>`）；`text` = **1 个 `<g>` + 每个非空行 1 个 `<text>`**；`ticks` = **`count` 个 rect**（`count` 取 `geometry.count`，展开口径见 T2 与 `loop/thermo_shape.py:17`）；`outline` **1** 条 `<polyline>`；占位（`chart` / 未知 type / 取不到图）**1** 个（只有虚线框；它挂的 `<title>` 是子节点且**不带** `data-el-id`，不计入本口径）。
-  - 用这个公式算出来的实测值：`auto_layout` 的 `heat_ratio_top5` = **116**（rect 12 + text 12×2 + outline 5 + ellipse 5 + ticks 65），`heat_age` = **23**（rect 2 + text 8×2 + arc 5）。占位卡（`multicol/_spread`、`page`、`paper`）每张只有 **1** 个占位元素 = **1** 个节点。
-  - **不要**用 `renderElement()` 的返回值计数（那是 104 / 15）：它把每个 text 元素的 `<g>` 只记 1 个，漏掉逐行 `<text>`，两套口径差 `text 元素数`。只写死一个数字、不写公式的话，将来"多包一层 `<g>`"会红而没人知道该不该红。
-  - 测试里把公式与逐项累加都写成显式代码（每个分支一行 `expected += ...` 加注释），总数断言用累加结果而不是字面量。
-- 逐元素 bbox 回算：对每个有 `data-el-id` 的节点，把它画出的所有节点的 attr 取并集，换算回英寸，与 `el.x_in/y_in/w_in/h_in` 差 `< 1e-6`。**`ticks`/`outline` 跳过**（它们是派生的多节点，由 T2 的点集对拍负责）
-- **Review Focus #4**：卡1 的 `frame` 元素 `x_in=0`、卡片 `x_in=0.4` → 该 `rect` 的绝对 x 属性必须 == `0`（相对卡片），而不是 `40`
-- `_plain` 夹具（0 卡片 3 块）：卡片数为 0 不抛，块字符节点数 === 3
-- 金样本不存在时整组 `skipTest`（`out/` 不入库）
+  - 卡片内推导公式（按元素累加）：形状（`rect` 非 track / `ellipse` / `arc` / `image`）各 **1**；`role='track'` **2**（矩形 + 下半圆 `<path>`）；`text` = **1 个 `<g>` + `min(非空行数, 4)` 个 `<text>`**；`ticks` = **`geometry.count` 个 rect**；`outline` **1** 条 `<polyline>`；占位（`chart` / 未知 type / 取不到图）**1**（只有虚线框；它挂的 `<title>` 不带 `data-el-id`，不计入）。
+  - 页面级推导公式：每块 = **`line_groups.length` 个 `<g>`**（多栏块会出多个 `<g>`，且**共用同一个 `data-el-id`**）+ **非空行数** 个 `<text>`；每张插图 **1**。
+  - 实测值（用上面两条公式算，与渲染逐份核对过 **11/11 零偏差**）：`auto_layout` 卡1 `heat_ratio_top5` = **116**、卡2 `heat_age` = **23**、页级 **10**、全页 **149**；`_plain` = **6**（3 块 × 1 行 × 1 组，**不是 3**）；`multicol` **154**、`multicol/_spread` **159**、`illustrated` / `illustrated/_no_asset` **154**、`illustrated/_spread` **151**、`page` **146**、`paper` **155**、`theme_match` **153**、`theme_match/_no_theme` **123**。占位卡（`multicol/_spread`、`page`、`paper`）每张 = **7**（frame 1 + title_band 1 + title 2 + scale_note 2 + 占位 1）。
+  - **不要**用 `renderElement()` 的返回值计数（那是 104 / 15）：它把每个 text 的 `<g>` 只记 1 个、漏掉逐行 `<text>`，两套口径差恰为「非空行总数」。
+  - 测试里把公式与逐项累加写成显式代码（每个分支一行 `expected += ...` 加注释），总数断言用累加结果而不是字面量；**对全 11 份样本逐份跑，每份一个带样本名的子用例**（失败时报出是哪份）。
+- 逐元素 bbox 回算：**px 空间精确相等**，期望值在测试里内联算（**不调 `units.js`，避免自证**）：
+  `exp = [Math.trunc(x*100), Math.trunc(y*100), Math.trunc((x+w)*100), Math.trunc((y+h)*100)]`，与渲染 attr **零容差**比对。
+  **绝不写 `< 1e-6` 英寸**：渲染按整像素截断，回算成英寸必然差到 1px = 0.01in；实测全 11 份 `max |trunc(boundary) - inch*100| = 1.0`，天真的 1e-6 判据在卡1 单独就 68 个分量里 63 个失败。另加一条**只用于报错可读性**的英寸空间断言（容差 `1e-2`），不做闸门。
+- bbox 回算只覆盖能精确回算的四类：`rect`（**非 track**）、`ellipse`、`image` / 占位。其余**必须跳过但要有显式计数断言**（`skipped === expected`，不许静默 `continue`）：`track` 是 2 节点且 cap 底部比元素盒底多 +22.36px；`ticks` 是 `count` 个 rect，并集不是元素盒；`outline` 只有 `points`；`arc` 只有 `d`（楔形只覆盖整圆盒的一部分）；`text` 的 `<g>` 无任何几何属性。实测可覆盖数：`auto_layout` 卡1 `12/39`、卡2 `2/15`，每页 **14** 个、px 空间 14/14 精确。
+- `arc` 单独一条判据：从 `d` 里解析 `M cx,cy` 与 `A r r`，断言 `cx,cy` === 盒中心且 `r === box.width/2`（实测 5 个 sector 全精确：`353.5,305.5,123.5`）。
+- **Review Focus #4**：卡1 的 `frame` 元素 `x_in=0`、卡片 `x_in=0.4` → 该 `rect` 的 `x` 属性必须 == `0`（相对卡片），而不是 `40`。
+- `_plain` 夹具（0 卡片 3 块）：卡片数为 0 不抛，页级字符节点数 === **6**。
+- **必须留一条不依赖金样本的判据**（`out/` 是 gitignore，fresh clone 上金样本组会 `skip`）：对一份极简合成 doc（1 卡 1 块，手写 3 个元素）断言节点公式成立。不许让整组在 fresh clone 上静默全绿。
 
 - [ ] **Step 2: 跑测试看它失败**
 
@@ -422,7 +431,7 @@ cd frontend && npm test -- v1
 
 - [ ] **Step 3: 实现 helpers + 让测试通过**
 
-`attrToInch` 用 `parseFloat(attr) / PX_PER_IN`。`collectByElId` 只认 `data-el-id`（渲染时必须给每个元素的所有节点打上这个属性——如果 T1-T4 没打，这一步补上，并回 T5 重跑）。
+`attrToInch` 用 `parseFloat(attr) / PX_PER_IN`。`collectByElId` 只认 `data-el-id`，**键必须按卡片定域**（见 Step 1）。渲染侧每个元素的所有节点都已在 T3/T4 打上 `data-el-id`，本 Task 不需要回改 `src/`；若真发现漏打，先停下核对是不是口径理解错了（评审已实测 `MISSING=0`，唯一例外是占位框的 `<title>`，它本来就不该带）。
 
 - [ ] **Step 4: 跑测试通过 + Python 回归**
 
@@ -447,18 +456,21 @@ git commit -m "test(frontend): V1 结构对拍——节点数与逐元素 bbox �
 
 **Interfaces:**
 - Consumes: `renderPage`、sharp、`out/demo/auto_layout/preview.png`、`out/demo/auto_layout/_cards/card_00_heat_ratio_top5.png`、`card_01_heat_age.png`
+- Produces: `rasterize.mjs` 里的 `svgToPng(svg, {width, height}) -> Buffer`、`comparePixels(goldenBuf, mineBuf, mask) -> {considered, exact, within1px, edge, inner}`
 
 - [ ] **Step 1: 写失败测试**
 
 判据（全部来自实测，不要改数字）：
 
+- **光栅化前必须把外层 `<svg>` 的展示尺寸改写成 viewBox 尺寸**：`renderPage` 缺省 `scale=96` → `width="960" height="1440"`，而金样本 `preview.png` 是 `1000×1500`（`PX_PER_IN=100` 口径）。不改写会直接 SIZE MISMATCH（sharp 出 960×1440）。做法：正则取 `viewBox="0 0 W H"`，把 `width="960" height="1440"` 替成 `width="W" height="H"`。改写后实测 `rasterized: 1000 x 1500`。
 - 光栅化两边都 `.removeAlpha()`（**必做**：不这么做通道错位会把相似度砸到 49%，这是踩过的坑）
-- **文字 bbox 全部抠掉**：把该页所有 `text` 元素的 px 盒子并集再外扩 2px 做成掩膜
-- 卡片级：`card_00` 与 `card_01` 的非文字像素，**1px 容差内 ≥ 98%**
-- 整页级：`preview.png` 的卡片区域内非文字像素，1px 容差内 ≥ 98%
-- 差值分类记账：断言"描边差"（边缘 1px 带内的像素）占全部差异的 **≥ 60%**，其余差异打印出来（这条不静默放过，而是逼着实现者看清剩下的 2% 是什么）
+- **文字 bbox 掩膜必须用契约的 `x_in/y_in/w_in/h_in` 算，不能用 `<text>` 的 `x`/`y`/`font-size` 粗估**：粗估（宽 = 字数 × 字号）会多掩 30.55% 画面、把整页相似度压到 `94.97% ~ 95.60%`（**假红**）。用契约盒转 px 再外扩 2px 后，整页非文字像素 `1041690`，`exact 98.61% / 1px 99.09%`。
+- 卡片级（**主判据**）：`card_00_heat_ratio_top5.png`(607×337) 与 `card_01_heat_age.png`(607×496) 的非文字像素，**1px 容差内 ≥ 98%**。实测：卡1 `exact 96.79% / 1px 99.37%`、卡2 `exact 99.04% / 1px 99.76%`。
+- 整页级：`preview.png` 的**卡片区域内**非文字像素，1px 容差内 ≥ 98%。实测 `exact 98.22% / 1px 99.62%`（非文字像素 356810）。
+- 差值分类记账：断言"描边差"（边缘带内的像素）占全部差异的 **≥ 60%**（实测卡1 98.8%、卡2 96.5%、整页 97.9%），其余差异打印出来（这条不静默放过，而是逼着实现者看清剩下的 2% 是什么）。
+- `0.5` 平局用例（R12/R36 遗留）：显式加 `font_pt=9.0` 的 label 字号与 `y_in=1.825` 的 `roundPx` 两条断言，盯住 half-to-even 与 `Math.round` 的分歧（`pyRound(12.5)=12` 而 `Math.round(12.5)=13`；`pyRound(182.5)=182` 而 `Math.round(182.5)=183`）。差异记进边缘像素账本，不进总体百分比。
 - 字体不可用（用 sharp 渲染一段中文探针得 0 暗像素）→ 整组 `skipTest`
-- 金样本不存在（`out/` 未生成）→ `skipTest`
+- 金样本不存在（`out/` 未生成）→ `skipTest`，**但另留一条不依赖金样本的判据**：对合成 doc 光栅化后断言尺寸与背景色正确，不许整组静默全绿。
 
 - [ ] **Step 2: 跑测试看它失败（并输出真实百分比）**
 
@@ -499,7 +511,13 @@ git commit -m "test(frontend): V2 像素对拍——1px 容差 ≥98% 且差值�
 
 - [ ] **Step 1: 补 `frontend/README.md`**
 
-必须写清四件事：① 公开 API（`mountPage` 签名 + `opts` 各字段含义 + 返回值）；② **取整口径**（卡片内 trunc / 整版 round，为什么）；③ 文字口径（优先用契约的 `lines`/`font_pt`、最多 4 行、基线用 ascent）；④ 五条已知偏差（`line_height_ratio` 与 `ROLE_ALIASES` 在 `theme.js` 里、无完整 schema 校验证、无 Vite、描边 1px、字体靠系统）。**保留原有三条铁律原文不动**。
+必须写清四件事：① 公开 API（`mountPage` 签名 + `opts` 各字段含义 + 返回值）；② **取整口径**（卡片内 trunc / 整版 round、`pyRound` 是银行家舍入、为什么）；③ 文字口径（优先用契约的 `lines`/`font_pt`、最多 4 行、基线用 ascent、整版块按画布缩放并钳位到 `font_pt_clamp`）；④ 五条已知偏差（`line_height_ratio` 与 `ROLE_ALIASES` 在 `theme.js` 里、无完整 schema 校验、无 Vite、描边 1px、字体靠系统）。
+
+另加两条**必须写**的操作须知（都是实测踩出来的）：
+- **`assetsBase` 与 `image.path` 会双拼**：契约里 `image.path` 已经是 `assets/icons/xxx.png`（自带 `assets/` 前缀），而缺省 `assetsBase` 也是 `'assets'` ⇒ 拼出 `assets/assets/icons/xxx.png`。要么传 `resolveAsset` 覆盖（demo 就是这么做的：`(path) => '../../' + path`），要么传 `assetsBase: ''` —— 但**注意 `''` 会拼出前导斜杠**（模板是 `${base}/${path}`），浏览器从根路径解析。两条路选一条，别默认值直接用。
+- **`on('warning')` 覆盖两个阶段**：`normalizeDoc` 的读契约警告 + `renderPage` 的渲染期降级警告（缺 `spec.elements`、插图取不到、`chart`/未知 type 占位）。要么订阅它、要么降级就是静默的。
+
+**保留原有三条铁律原文不动**。
 
 - [ ] **Step 2: 更新 spec 的分期表**
 
@@ -540,7 +558,7 @@ git push -u origin frontend/pagespec-contract
 |---|---|
 | §6 库结构（`src/{index,theme,units,doc}.js`、`shapes/`、`render/`） | T1/T2/T3/T4 的 Files 表 |
 | §6 公开 API `mountPage` | T4 |
-| §7 V1 结构对拍（容差 1e-6） | T5 |
+| §7 V1 结构对拍（容差 1e-6） | T5（**改判**：`1e-6` 英寸做不到——渲染按整像素截断，回算必然差 1px。改成 px 空间精确相等 + 公式推导节点数，理由见 T5 Step 1） |
 | §7 V2 像素对拍（结构重合度） | T6（阈值取实测：1px ≥98%，抠文字 bbox） |
 | §7 V6 主题单一来源 | T1 Step 9 起每个 Task 都验 |
 | §5.5 八个图元 | T3（7 个）+ T3 的 `chart` 占位分支 |

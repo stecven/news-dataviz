@@ -27,6 +27,7 @@ Python 侧（`loop/`、`tests/`）**一行都不许改**。P2 全部落在 `fron
 3. **取整口径分两处，不能混**：
    - 单卡 `render_preview`（`loop/preview.py:51`）：画布与元素 box 都用 **`int()` 截断** → JS 用 `Math.trunc`。
    - 整版 `compose_preview`（`loop/render_page.py:148`）：画布、卡片贴图位置、`_draw_block` 的 x/y 都用 **`int(round())`** → JS 用 `Math.round`。
+   - **但 `int(round(x))` 不是 `Math.round(x)`**：Python 的 `round()` 是 **half-to-even（银行家舍入）**，`Math.round` 是 half-up。实测真实产物里落 `.5` 的地方会分叉：`pxFromPt(9.0)`（= `9*100/72 = 12.5`）Python 得 **12**、JS 得 13，全 11 份夹具有 **12 个 `title` 元素**用 `font_pt = 9.0`；`roundPx(1.065)`（= `106.5`）Python 得 **106**、JS 得 107，有 **5 张插图的 `rect[1]`** 是 `1.065`。所以 `pxFromPt` / `roundPx` / `lineHeightPx` 一律走 `pyRound(x)`（half-to-even），`truncPx` / `boxPxTrunc` 仍走 `Math.trunc`。判据：`pxFromPt(9) === 12`、`roundPx(1.065) === 106`、`roundPx(0.5625) === 56`（Python `int(round(56.5))` 也取偶）。
 4. **先画形状，后画文字**（`loop/preview.py:39 _render_order`）。半圆 sector 是整圆 PIE 的 180° 楔形，bbox 覆盖整个下半平面，先画文字会被盖掉。
 5. **文字优先用契约里冻结的 `lines` 与 `font_pt`**（spec D10）。`loop/preview.py::_draw_text` 是现场重新折行、字号从 role 重算的，**不要照抄那部分**；只有 `lines` 为空的老样本才退回按 `text` 折行。
 6. **最多画 4 行**（`loop/preview.py:164` 的 `lines[:4]`）。契约里的 `lines` 可能长于 4 行，JS 必须同样截断到 4 行，多出来的不画。
@@ -37,7 +38,7 @@ Python 侧（`loop/`、`tests/`）**一行都不许改**。P2 全部落在 `fron
 11. **`npm install` 必须显式加 `--registry=https://registry.npmmirror.com`**（`registry.npmjs.org` 在本机不可达，会挂死）。
 12. **`node_modules` 不入库**：新建 `frontend/.gitignore`（不要动仓库根的 `.gitignore`，那是高危文件）。
 13. **不改 `loop/`、`tests/`、`ingest/`、`assets/`、`db/`、`CONTRIBUTING.md`、`.gitignore`、`.gitattributes`、`.github/`**（spec C6 + CODEOWNERS）。
-14. **Python 全量测试必须一直绿**：`python -m unittest discover -s tests -t . -q` → `Ran 722 tests` / `OK (skipped=1)`，其中那次 skip 在 P2 完成后变成**真跑**（见约束 7），总数不变。
+14. **Python 全量测试必须一直绿**：`python -m unittest discover -s tests -t . -q` → `Ran 722 tests` / `OK`。注意：**T1 之前**是 `OK (skipped=1)`，那次 skip 就是 V6 guard（`frontend/src` 还不存在）；**T1 一建 `frontend/src/`，guard 立刻真跑，skip 数从 1 变 0**。测试总数 722 始终不变。任何 Task 里若看到 `skipped=1` 或总数变动，都是错的。
 
 ### 已知偏差（执行者须知，不要"顺手修正"）
 
@@ -199,7 +200,7 @@ cd frontend && npm test -- doc
 cd frontend && npm test
 cd .. && python -m unittest discover -s tests -t . -q
 ```
-预期：JS 全绿；Python `Ran 722 tests` / `OK (skipped=1)`（skip 项这次是真跑的 guard，但计数不变）。
+预期：JS 全绿；Python `Ran 722 tests` / `OK`（**没有 skipped**：Step 9 之后 `frontend/src/` 已存在，V6 guard 那条 `skipTest` 不再触发，skip 数从 1 变 0）。
 
 - [ ] **Step 14: 提交**
 
@@ -280,7 +281,7 @@ git commit -m "feat(frontend): 温度计复合图元照抄 Python 几何（P2 Ta
 - [ ] **Step 1: 写 text 的失败测试**
 
 - **Review Focus #2**：`lines` 有 6 行时只产出 4 个 `<text>` 节点，且第 5/6 行内容不出现在 SVG 字符串里
-- **Review Focus #3**：`font_pt = 11.26`、`lines=['a']`、`align='left'` → 第一个 `<text>` 的 `y` 属性 === `boxTopPx + ascentPx(16)`；用 `ceil(px*1.058)` 复算一遍对上
+- **Review Focus #3**：`font_pt = 11.26`、`lines=['a']`、`align='left'`、盒高 `h_in` **恰好能放下一行**（`h == lineHeightPx(11.26)/100`，即 `dy=0`）→ 第一个 `<text>` 的 `y` 属性 === `boxTopPx + ascentPx(16)`；用 `ceil(px*1.058)` 复算一遍对上。**另立一条**用真实 `title`（`h_in=0.5`、`font_pt=11.26`，`boxPxTrunc` 得 `[45,30,562,80]`、`dy=14.5`）断言 `y === 61.5`——因为真实元素 `dy` 非零，`y` 不等于 `boxTopPx+ascent`。
 - 行间距 === `lineHeightPx(font_pt)`（11.26 → 21）
 - `align` 三档：`left` → `text-anchor="start"` + `x = x0`；`center`（缺省）→ `"middle"` + `x = x0 + w/2`；`right` → `"end"` + `x = x0 + w`
 - `left` 且多行时整体垂直居中（`dy = (h - line_h*lines.length)/2`，不小于 0）；非 `left` 时 `dy = 0`
@@ -403,7 +404,11 @@ git commit -m "feat(frontend): 整版渲染骨架与 mountPage 公开 API（P2 T
 
 - [ ] **Step 1: 写失败测试（V1）**
 
-- 节点总数：`auto_layout` 两张卡片分别是 **99** 与 **15**（实测：卡1 `heat_ratio_top5` = rect 12 + text 12（12 行） + outline 5（每元素 1 个 polyline） + ellipse 5 + ticks 65（5 个 ticks 元素 × 13 根）；卡2 `heat_age` = rect 2 + text 8 + arc 5）。**写死这两个数字并加注释说明来源**，否则"少画一个图元"不会被发现
+- 节点总数：**口径是「DOM 里带 `data-el-id` 的节点数」，且必须由公式推导，不许只写死总数。**
+  - 推导公式（每个元素按其 `type`/`role` 累加）：形状元素（`rect` 非 track / `ellipse` / `arc` / `image`）各 **1** 个节点；`role='track'` **2** 个（矩形 + 下半圆 `<path>`）；`text` = **1 个 `<g>` + 每个非空行 1 个 `<text>`**；`ticks` = **`count` 个 rect**（`count` 取 `geometry.count`，展开口径见 T2 与 `loop/thermo_shape.py:17`）；`outline` **1** 条 `<polyline>`；占位（`chart` / 未知 type / 取不到图）**1** 个（只有虚线框；它挂的 `<title>` 是子节点且**不带** `data-el-id`，不计入本口径）。
+  - 用这个公式算出来的实测值：`auto_layout` 的 `heat_ratio_top5` = **116**（rect 12 + text 12×2 + outline 5 + ellipse 5 + ticks 65），`heat_age` = **23**（rect 2 + text 8×2 + arc 5）。占位卡（`multicol/_spread`、`page`、`paper`）每张只有 **1** 个占位元素 = **1** 个节点。
+  - **不要**用 `renderElement()` 的返回值计数（那是 104 / 15）：它把每个 text 元素的 `<g>` 只记 1 个，漏掉逐行 `<text>`，两套口径差 `text 元素数`。只写死一个数字、不写公式的话，将来"多包一层 `<g>`"会红而没人知道该不该红。
+  - 测试里把公式与逐项累加都写成显式代码（每个分支一行 `expected += ...` 加注释），总数断言用累加结果而不是字面量。
 - 逐元素 bbox 回算：对每个有 `data-el-id` 的节点，把它画出的所有节点的 attr 取并集，换算回英寸，与 `el.x_in/y_in/w_in/h_in` 差 `< 1e-6`。**`ticks`/`outline` 跳过**（它们是派生的多节点，由 T2 的点集对拍负责）
 - **Review Focus #4**：卡1 的 `frame` 元素 `x_in=0`、卡片 `x_in=0.4` → 该 `rect` 的绝对 x 属性必须 == `0`（相对卡片），而不是 `40`
 - `_plain` 夹具（0 卡片 3 块）：卡片数为 0 不抛，块字符节点数 === 3
@@ -506,7 +511,7 @@ git commit -m "test(frontend): V2 像素对拍——1px 容差 ≥98% 且差值�
 cd frontend && npm test
 cd .. && python -m unittest discover -s tests -t . -q
 ```
-预期：JS 全绿；Python `Ran 722 tests` / `OK (skipped=1)`。
+预期：JS 全绿；Python `Ran 722 tests` / `OK`（无 skipped）。
 
 - [ ] **Step 4: 越界核查**
 

@@ -113,16 +113,20 @@ export function renderText(parent, el, opts = {}) {
 
   const geometry = el.geometry && typeof el.geometry === 'object' ? el.geometry : null;
   const align = normalizeAlign(geometry && geometry.align);
-  const [x0, y0, x1, y1] = boxPxTrunc(el);
+  // `opts.box` 是已经取整好的像素四元组 `[x0, y0, x1, y1]`：整版块用它在**页**口径
+  // 落位（`roundPx`），卡片用 `boxPxTrunc`。给了就不再按元素自己的英寸盒重算。
+  const [x0, y0, x1, y1] = opts.box != null ? opts.box : boxPxTrunc(el);
   const fontPt = fontPtFor(el, theme, mode);
   const px = pxFromPt(fontPt);
   const lineH = lineHeightPx(fontPt);
   const lines = linesFor(el, mode);
   const count = Math.min(lines.length, MAX_LINES);
   // 左对齐时整体在盒内竖直居中；其余两档按 Pillow 的做法从盒顶起排（dy 恒 0）。
-  const dy = align === 'left' && count > 0
-    ? Math.max(0, ((y1 - y0) - lineH * count) / 2)
-    : 0;
+  // `opts.noDy` 关掉这个居中：整版块走 `loop/render_page.py::_draw_block` 的口径，
+  // 那里从块顶 + 0.05in 起排，没有 dy。
+  const dy = opts.noDy || align !== 'left' || count <= 0
+    ? 0
+    : Math.max(0, ((y1 - y0) - lineH * count) / 2);
   const anchor = ANCHORS[align];
   const x = align === 'left' ? x0 : (align === 'right' ? x1 : x0 + (x1 - x0) / 2);
   const fill = theme.color('text');

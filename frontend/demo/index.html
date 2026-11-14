@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>P2 只读渲染 demo</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #f4f5f7;
+      font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p.hint { margin: 0 0 20px; font-size: 13px; color: #666; }
+    #stage { background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16); }
+    #warnings { margin-top: 16px; font-size: 12px; color: #a15c00; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>整版只读渲染（P2 Task 4）</h1>
+  <p class="hint">
+    数据来自 <code>out/demo/auto_layout/pagelayout.json</code>，
+    由 <code>mountPage()</code> 画成一页 SVG。请在仓库根运行
+    <code>python -m http.server 8765</code> 后访问
+    <code>/frontend/demo/</code>。
+  </p>
+  <!-- 模块自己负责往这个容器里塞 <svg> -->
+  <div id="stage"></div>
+  <div id="warnings"></div>
+  <script type="module" src="./demo.js"></script>
+</body>
+</html>

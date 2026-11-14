@@ -27,6 +27,46 @@ python scripts/build_multicol_demo.py       # 2 栏排版 + 卡片跨栏
 python scripts/build_illustrated_demo.py    # 图文并茂 + 跳过验证
 ```
 
+## JS 只读渲染库（P2）
+
+`frontend/src/` 是一个**零依赖、只读**的渲染库：吃一份 `pagelayout.json`，
+吐一页 `<svg>`。它不改文档、不回写 JSON、不猜数据 —— 换色换字号一律照文档里的
+`theme` 来。
+
+两个公开入口：
+
+| 入口 | 签名 | 用途 |
+|---|---|---|
+| `renderPage` | `renderPage(container, doc, opts) -> { svg, warnings }` | 一次性渲染，返回节点与降级告警 |
+| `mountPage` | `mountPage(container, doc, opts) -> { svg, doc, on, destroy }` | 带生命周期的挂载，v1 只支持 `on('warning', fn)`（`change` / `exportSVG` 留给 P3） |
+
+```js
+import { mountPage } from './src/index.js';
+const page = mountPage('#stage', doc, { scale: 50 });
+page.on('warning', (msg) => console.warn(msg));  // 缺图、缺 spec 之类的降级
+```
+
+`opts` 里 `scale`（默认 96）**只管 `<svg>` 的展示尺寸**，不参与任何像素换算：
+内部坐标永远是 `PX_PER_IN = 100` 的 1:1 口径，`viewBox` 写内部尺寸、`width` /
+`height` 写展示尺寸。`assetsBase` 与 `resolveAsset` 管图片地址解析。
+
+### demo 页
+
+```bash
+python -m http.server 8765          # 从仓库根起（demo 要读 out/ 与 assets/）
+```
+
+浏览器打开 <http://127.0.0.1:8765/frontend/demo/>，页面会 `fetch`
+`out/demo/auto_layout/pagelayout.json` 再 `mountPage` 画出来。
+
+同一份 `pagelayout.json` 的两个后端并排（左：Python Pillow；右：本库 JS/SVG）：
+
+| Python `loop/render_page.py` | JS `frontend/src/render/stage.js` |
+|---|---|
+| ![Python 整版](<../out/handoff/frontend-preview.png>) | ![JS 整版](<../out/handoff/frontend-demo.png>) |
+
+两张图都落在 `out/handoff/`（`out/` 被 gitignore，不入库）。
+
 ## 契约：`pagelayout.json` 与 `theme`
 
 整版版面的数据契约冻结在 **`frontend/schema/pagelayout.schema.json`**（版本 `1.0`）。

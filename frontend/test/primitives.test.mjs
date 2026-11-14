@@ -319,6 +319,54 @@ describe.skipIf(!HAS_SAMPLE)('renderText（card 模式）', () => {
     expect(nodes[0].textContent).toBe('只有 text');
   });
 
+  it('font_pt 缺省（null / undefined / 空串）直接抛，不许静默画成 font-size=0', async () => {
+    const { renderText } = await import('../src/render/text.js');
+    const { svg, theme } = stage();
+    // 根因：`Number(null)` 与 `Number('')` 都是 0，`Number.isFinite(0)` 为 true，
+    // 于是过去的实现会渲染出 font-size="0" —— 文字彻底不可见且零提示。
+    for (const [label, fontPt] of [
+      ['null', null], ['undefined', undefined], ['空串', ''],
+    ]) {
+      const el = {
+        id: 'no_font',
+        type: 'text',
+        role: 'label',
+        x_in: 0.3,
+        y_in: 0.3,
+        w_in: 2,
+        h_in: 0.3,
+        lines: ['甲'],
+        font_pt: fontPt,
+        fill: null,
+      };
+      expect(() => renderText(svg, el, { theme, mode: 'card' }), label).toThrow(/font_pt/);
+      // 抛错前不许已经挂上半成品节点（否则调用方 catch 之后 DOM 里留着一堆屎）。
+      expect(svg.querySelectorAll('[data-el-id="no_font"]').length, label).toBe(0);
+    }
+  });
+
+  it('font_pt = 0 是合法数值，不抛，font-size 就是 "0"', async () => {
+    const { renderText } = await import('../src/render/text.js');
+    const { svg, theme } = stage();
+    // 0 与「缺省」必须分开：0 是排版阶段给出的确定值，抛错会误伤合法输入。
+    const el = {
+      id: 'zero_font',
+      type: 'text',
+      role: 'label',
+      x_in: 0.3,
+      y_in: 0.3,
+      w_in: 2,
+      h_in: 0.3,
+      lines: ['甲'],
+      font_pt: 0,
+      fill: null,
+    };
+    const group = renderText(svg, el, { theme, mode: 'card' });
+    const node = group.querySelector('text');
+    expect(node.getAttribute('font-size')).toBe('0');
+    expect(node.textContent).toBe('甲');
+  });
+
   it('data-el-id 同时打在 <g> 与每个 <text> 上', async () => {
     const { renderText } = await import('../src/render/text.js');
     const { svg, theme } = stage();
@@ -559,6 +607,13 @@ describe('renderElement（其余图元，Step 4 判据）', () => {
     expect(d.startsWith(`M${cx},${cy} L${cx - r},${cy}`)).toBe(true);
     // 14.4° < 180°，large-arc 位为 0、sweep 位为 1（y 向下顺时针）。
     expect(d).toContain('A' + `${r} ${r} 0 0 1`);
+    //
+    // R40-④：真实样本 45 个 arc 的 span 只有 14.4 / 19.8 / 30.6 / 57.6 四种，
+    // **没有恰好 180° 的样本**。所以 `end - start > 180` 与 `>= 180` 在这批数据上
+    // 给出完全相同的 large-arc 位，无样本可区分；而在恰好 180° 时两者对 SVG
+    // 也是**等价路径**（半圆只有一条：large-arc=0 与 =1 画的是同一个半圆）。
+    // 结论：这处口径**没有测试覆盖、也不需要覆盖**，别为了「更精确」去改它。
+    expect(el.geometry.end_angle - el.geometry.start_angle).toBeCloseTo(14.4, 9);
   });
 
   it('arc：跨过 180° 的扇区把 large-arc 置 1', async () => {
@@ -691,6 +746,17 @@ describe('renderElement（其余图元，Step 4 判据）', () => {
     for (const node of nodes) expect(node.getAttribute('data-el-id')).toBe('placeholder_1');
     expect(warnings.length).toBe(1);
     expect(warnings[0]).toContain('placeholder_1');
+
+    // R37：`<title>` 是 spec D13「在图上写明理由」的唯一载体。它**不产生像素**，
+    // 删掉后虚线框还在、肉眼分不出来 —— 评审把删 `<title>` 当作定向破坏时
+    // 原来的 29 条测试全绿（SURVIVED）。所以这里必须显式钉住，并把
+    // `<title>` 与 `warnings` 两条通道绑死：只改一边就会红。
+    for (const node of nodes) {
+      const titles = node.querySelectorAll('title');
+      expect(titles.length).toBe(1);
+      expect(titles[0].textContent.trim().length).toBeGreaterThan(0);
+      expect(titles[0].textContent).toBe(warnings[0]);
+    }
   });
 
   it('Review Focus #6：chart 画虚线占位 + 一条警告，不抛', async () => {
@@ -720,6 +786,11 @@ describe('renderElement（其余图元，Step 4 判据）', () => {
     expect(box.getAttribute('data-el-id')).toBe('chart_degrades');
     expect(warnings.length).toBe(1);
     expect(warnings[0]).toContain('chart_degrades');
+    // R37：`<title>` 必须存在且与 warnings[0] 同一句话（见 image 缺文件那条的说明）。
+    const titles = box.querySelectorAll('title');
+    expect(titles.length).toBe(1);
+    expect(titles[0].textContent).toBe(warnings[0]);
+    expect(titles[0].textContent.trim().length).toBeGreaterThan(0);
   });
 
   it('未知 type 画虚线占位 + 警告，不抛', async () => {
@@ -746,6 +817,11 @@ describe('renderElement（其余图元，Step 4 判据）', () => {
     expect(nodes[0].getAttribute('data-el-id')).toBe('pie3d_unknown');
     expect(warnings.length).toBe(1);
     expect(warnings[0]).toContain('pie3d_unknown');
+    // R37：同上，`<title>` 与 warnings[0] 必须绑死（见 image 缺文件那条的说明）。
+    const titles = nodes[0].querySelectorAll('title');
+    expect(titles.length).toBe(1);
+    expect(titles[0].textContent).toBe(warnings[0]);
+    expect(titles[0].textContent.trim().length).toBeGreaterThan(0);
   });
 
   it('text 走 renderText：返回 <g>，其 data-el-id 与每个 text 一致', async () => {

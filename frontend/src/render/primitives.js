@@ -15,7 +15,7 @@
  * 在这里会抛 `ValueError` / `FileNotFoundError`，JS 侧改成「退化但不崩」。
  */
 import {
-  boxPxTrunc, pxFromIn, truncPx,
+  PX_PER_IN, boxPxTrunc, pxFromIn, truncPx,
 } from '../units.js';
 import { BORDER_ROLE } from '../theme.js';
 import { optional } from '../shapes/required.js';
@@ -272,7 +272,9 @@ function drawTrack(parent, el, ctx) {
   const body = rectNode(el, box, fill, null, null);
   parent.appendChild(body);
 
-  const capR = (el.w_in * 100) / 2;
+  // 半圆顶半径按 `preview.py:118` 的 `r = w_in * PX_PER_IN / 2` 算：用**未截断**的
+  // `w_in` 而不是盒宽（`box.width` 是两个边界各自截断后相减，可能差 1px）。
+  const capR = (el.w_in * PX_PER_IN) / 2;
   const capCx = box.x + box.width / 2;
   const capCy = box.y + capR;
   const d = `M${capCx - capR},${capCy}`

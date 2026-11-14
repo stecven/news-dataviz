@@ -50,14 +50,33 @@ function linesFor(el, mode) {
       return candidate.map((line) => (line == null ? '' : String(line)));
     }
   }
+  // 兜底：0.x 老样本的路径 —— 整段 `text` 当成**唯一一行**画，**不折行**。
+  // 所以超长 `text` 会横向溢出盒外（没有 `<textLength>`、也没有裁剪），
+  // 与 Pillow 侧现场折行的结果不一致。这是刻意的：[契约 1.0 的 `lines` 由排版
+  // 阶段冻结]，这里只负责「老样本别崩」，不接管折行职责。要折行得先有字体度量，
+  // 而 jsdom 没有（R29）。
   if (el && el.text != null && String(el.text) !== '') return [String(el.text)];
   return [];
 }
 
-/** 按 `mode` 取字号（磅）。 */
+/**
+ * 按 `mode` 取字号（磅）。
+ *
+ * `font_pt` 缺省（`null` / `undefined` / `''`）时**直接抛**：`Number(null)` 与
+ * `Number('')` 都是 0，过去会让 `Number.isFinite` 放行，于是静默把字号画成零
+ * —— 文字彻底不可见，而且不报错、不留痕。宁可崩在调用点。
+ * **`font_pt = 0` 不抛**：0 是合法数值，是否可见由排版阶段负责。
+ */
 function fontPtFor(el, theme, mode) {
   if (mode === 'block') return theme.fontPt(el.role);
-  const pt = Number(el.font_pt);
+  const raw = el == null ? undefined : el.font_pt;
+  if (raw == null || raw === '') {
+    throw new Error(
+      `renderText: 元素 ${JSON.stringify(el && el.id)} 缺 font_pt，`
+      + `实际是 ${JSON.stringify(raw)}（不许静默当 0 画成不可见文字）`,
+    );
+  }
+  const pt = Number(raw);
   if (!Number.isFinite(pt)) {
     throw new Error(
       `renderText: 元素 ${JSON.stringify(el && el.id)} 的 font_pt 不是有限数值，`

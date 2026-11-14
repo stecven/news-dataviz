@@ -49,8 +49,20 @@ function assertClose(actual, expected, label) {
 /** 从夹具的 `box` + `geometry` 复原出实现认的元素（英寸，非像素）。 */
 function element(spec) {
   const [x_in, y_in, w_in, h_in] = spec.box;
-  // geometry 传浅拷贝：实现若就地改输入，后面几条用例会立刻红。
-  return { x_in, y_in, w_in, h_in, geometry: { ...spec.geometry } };
+  // 深拷贝 `geometry`：实现在不改输入时与浅拷贝无差别，但**「实现不许就地改输入」
+  // 这条不变量不能靠注释声明**——那种注释不会红，变异加一行 `g.__mutated = true`
+  // 照样全绿。真正的保护是下面 `keeps_geometry_unmutated` 里的深比较断言。
+  return { x_in, y_in, w_in, h_in, geometry: structuredClone(spec.geometry) };
+}
+
+/**
+ * 夹具里的 `count` 按 Python `int()` 的**向零截断**口径取值。
+ *
+ * 与 `ticks.js` 里 `Math.trunc(required(g, 'count'))` 是同一件事，测试独立复述一份、
+ * 不 import 实现。`derived/ticks_count_13_7` 就是为这条路准备的：`int(13.7) == 13`。
+ */
+function countOf(spec) {
+  return Math.trunc(Number(spec.geometry.count));
 }
 
 /** 按 kind 取夹具条目，保持 key 排序（`sort_keys` 落的盘），失败顺序稳定。 */
@@ -84,9 +96,19 @@ describe('shapes: 夹具本身的完整性', () => {
       FIXTURE['auto_layout:outline_1'].points,
     );
     // 而 20° 必须与之不同，证明 flare_deg 真的被读进去了、不是写死的常量。
+    // 注意这条只是**分支存在性提示**（两串点不同 ≠ 20° 是对的），单靠它分不清
+    // 「读了 20°」与「读了 21° / 读了 35° 但别处算错」。20° 的正确性由逐点比对
+    // 用例（`shapes/outline: 逐条与 Python 逐点一致 > derived/outline_flare_20deg`）
+    // 保证——那条才有 Python 算出来的期望值。
     expect(FIXTURE['derived/outline_flare_20deg'].points).not.toEqual(
       FIXTURE['auto_layout:outline_1'].points,
     );
+  });
+
+  it('covers_count_truncation_branch', () => {
+    // `int(13.7) == 13`：真实样本的 count 全是整数 13，截断口径在它们身上无从体现。
+    expect(FIXTURE['derived/ticks_count_13_7'].geometry.count).toBe(13.7);
+    expect(FIXTURE['derived/ticks_count_13_7'].points).toHaveLength(13);
   });
 });
 
@@ -96,7 +118,7 @@ describe('shapes/ticks: 逐条与 Python 逐点一致', () => {
       const rects = tickRects(element(spec));
 
       // 条数先钉死：少一根就说明 count 的口径（int 截断 vs 四舍五入）抄错了。
-      expect(rects.length).toBe(Number(spec.geometry.count));
+      expect(rects.length).toBe(countOf(spec));
       expect(rects.length).toBe(spec.points.length);
 
       for (let i = 0; i < rects.length; i += 1) {
@@ -130,7 +152,7 @@ describe('shapes/ticks: 自下而上', () => {
     const g = spec.geometry;
     const padTop = g.pad_top ?? 0;
     const padBottom = g.pad_bottom ?? 0;
-    return (spec.box[3] - padTop - padBottom) / Number(g.count);
+    return (spec.box[3] - padTop - padBottom) / countOf(spec);
   }
 
   it('first_tick_is_bottommost', () => {
@@ -139,7 +161,12 @@ describe('shapes/ticks: 自下而上', () => {
       ([, spec]) => spec.kind === 'ticks' && stepOf(spec) > 0,
     );
     // 子集不能悄悄空掉（否则这条断言就变成了空循环，永远绿）。
-    expect(usable.length).toBeGreaterThanOrEqual(20);
+    // 恰为 22 的构成：30 条真实 ticks 里 10 条（`auto_layout` 与
+    // `illustrated/_no_asset` 各 5 条）的 step 是负的，被排除 → 20 条；
+    // 再加 2 条派生样本（`derived/ticks_no_pads`、`derived/ticks_explicit_zero_pads`
+    // 去掉了 pad，step 因此转正）→ 22。写成死数而不是 >=，是为了将来增删样本时
+    // 立刻在**这里**报错，而不是让子集悄悄缩小、这条断言名存实亡。
+    expect(usable.length).toBe(22);
 
     for (const [key, spec] of usable) {
       const rects = tickRects(element(spec));
@@ -173,7 +200,7 @@ describe('shapes/ticks: 自下而上', () => {
       const g = spec.geometry;
       const padTop = g.pad_top ?? 0;
       const padBottom = g.pad_bottom ?? 0;
-      const count = Number(g.count);
+      const count = countOf(spec);
       const top = spec.box[1] + padTop;
       const step = (spec.box[3] - padTop - padBottom) / count;
 
@@ -181,9 +208,9 @@ describe('shapes/ticks: 自下而上', () => {
       assertClose(rects[count - 1][1], top, `${key} 末根取到 top`);
       checked += 1;
     }
-    // 30 条真实 + 派生样本，都过了一遍。
+    // 全部 ticks 样本都过了一遍（真实 + 派生 + 派生截断样本）。
     expect(checked).toBe(casesOf('ticks').length);
-    expect(checked).toBeGreaterThanOrEqual(30);
+    expect(checked).toBe(33);
   });
 });
 
@@ -201,6 +228,44 @@ describe('shapes/outline: 逐条与 Python 逐点一致', () => {
         expect(points[i]).toHaveLength(2);
         assertClose(points[i][0], spec.points[i][0], `${key} point[${i}][0]`);
         assertClose(points[i][1], spec.points[i][1], `${key} point[${i}][1]`);
+      }
+    });
+  }
+});
+
+describe('shapes/outline: 外接盒锚点只做平移', () => {
+  // 32 条真实样本的 `ox = x_in - (cx - R)` / `oy = y_in - cap_top` **全部恰好为 0**
+  // （生成时盒子就是按 `cx - R`、`cap_top` 摆的），所以把 `outline.js` 里的 `ox` 写死
+  // 成 0、或把 `capTop` 的基准换成别的，85 条测试全绿——这条语义当时零覆盖。
+  //
+  // 合成样本补的就是它：**同一个 geometry** 塞进三个不同的 `box`（`shifted/` 前缀），
+  // 期望点集由 `gen_thermo_shapes.py` 调 `loop.thermo_shape.outline_polyline` 算出。
+  // 两条断言各管一件事：
+  //   1. 绝对比对 `spec.points`——期望值来自 Python，`ox` 写死就会红；
+  //   2. 相对基准的差值恰为 `(dx, dy)`——钉住「平移」这个语义本身（而不是碰巧
+  //      x/y 都变了、幅度也可能抄串）。
+  for (const [key, spec] of casesOf('outline').filter(([k]) => k.startsWith('shifted/'))) {
+    it(key, () => {
+      const [dx, dy] = spec.shift;
+      const baseSpec = FIXTURE[spec.base];
+      expect(baseSpec, `${key}: 基准样本 ${spec.base} 必须存在`).toBeTruthy();
+      // 合成样本与原样本必须共用同一份 geometry，否则「纯平移」无从谈起。
+      expect(spec.geometry).toEqual(baseSpec.geometry);
+      expect(spec.box[2]).toBe(baseSpec.box[2]);
+      expect(spec.box[3]).toBe(baseSpec.box[3]);
+
+      const points = outlinePolyline(element(spec));
+      const basePoints = outlinePolyline(element(baseSpec));
+      expect(points).toHaveLength(OUTLINE_POINT_COUNT);
+      expect(points.length).toBe(basePoints.length);
+
+      for (let i = 0; i < points.length; i += 1) {
+        // 1. 与 Python 的绝对期望一致。
+        assertClose(points[i][0], spec.points[i][0], `${key} point[${i}][0]`);
+        assertClose(points[i][1], spec.points[i][1], `${key} point[${i}][1]`);
+        // 2. 相对基准恰为纯平移：逐分量加同一个 dx / dy，容差沿用 TOLERANCE。
+        assertClose(points[i][0] - basePoints[i][0], dx, `${key} point[${i}][0] 相对于基准的 dx`);
+        assertClose(points[i][1] - basePoints[i][1], dy, `${key} point[${i}][1] 相对于基准的 dy`);
       }
     });
   }
@@ -306,5 +371,126 @@ describe('shapes: 缺必需键就抛错，不给默认值', () => {
 
     expect(() => outlinePolyline(baseOutline)).not.toThrow();
     expect(baseOutline.geometry.flare_deg).toBeUndefined();
+  });
+});
+
+describe('shapes: 非有限数值必须抛错，不许静默变 NaN', () => {
+  // 这一组补的是评审 Minor #2：原来的 `required()` 只查「键在不在」，值是什么一概
+  // 放行。当时 `geometry.len = 'abc'` 会安静地返回 `[NaN, NaN, NaN, NaN] × 13`，
+  // 而 Python 抛 `ValueError: could not convert string to float: 'abc'`。
+  //
+  // 为什么必须对齐「抛」：T3 会把矩形坐标直接拼进 SVG 属性，`NaN` 在浏览器与 jsdom
+  // 里都不报错——图悄悄不画，比抛错难查一个量级。
+  //
+  // `null` 尤其危险：`Number(null) === 0`，`geometry.thick = null` 会得到 0 粗细。
+  const baseTicks = element(FIXTURE['auto_layout:ticks_1']);
+  const baseOutline = element(FIXTURE['auto_layout:outline_1']);
+
+  /** 造一份只改一个键的 geometry。 */
+  function withValue(base, key, value) {
+    return { ...base, geometry: { ...base.geometry, [key]: value } };
+  }
+
+  const BAD_NUMBERS = [
+    ['string_not_a_number', 'abc'],
+    ['null', null],
+    ['nan', Number.NaN],
+    ['positive_infinity', Number.POSITIVE_INFINITY],
+    ['negative_infinity', Number.NEGATIVE_INFINITY],
+    ['empty_string', ''],
+    ['whitespace_string', '   '],
+  ];
+
+  for (const key of ['len', 'thick']) {
+    for (const [tag, value] of BAD_NUMBERS) {
+      it(`ticks_${key}_${tag}_throws`, () => {
+        expect(() => tickRects(withValue(baseTicks, key, value))).toThrow();
+      });
+    }
+  }
+
+  for (const key of ['pad_top', 'pad_bottom']) {
+    for (const [tag, value] of BAD_NUMBERS) {
+      it(`ticks_${key}_${tag}_throws`, () => {
+        // 可选键只豁免「缺键」，不豁免「给了坏值」。
+        expect(() => tickRects(withValue(baseTicks, key, value))).toThrow();
+      });
+    }
+  }
+
+  for (const key of ['R', 'cap_r', 'cap_top', 'cx', 'cy', 'neck_h', 'tube_bottom']) {
+    for (const [tag, value] of BAD_NUMBERS) {
+      it(`outline_${key}_${tag}_throws`, () => {
+        expect(() => outlinePolyline(withValue(baseOutline, key, value))).toThrow();
+      });
+    }
+  }
+
+  for (const [tag, value] of BAD_NUMBERS) {
+    it(`outline_flare_deg_${tag}_throws`, () => {
+      expect(() => outlinePolyline(withValue(baseOutline, 'flare_deg', value))).toThrow();
+    });
+  }
+
+  it('count_is_the_documented_exception', () => {
+    // `count` 走 `Math.trunc`，**不**要求是整数：13.7 与 13 必须同结果（Python 的
+    // `int(13.7)` 也是 13）。但「非数值」仍旧要抛——`int("abc")` 在 Python 里同样炸。
+    const fractional = withValue(baseTicks, 'count', 13.7);
+    expect(tickRects(fractional)).toHaveLength(13);
+    expect(tickRects(fractional)).toEqual(tickRects(baseTicks));
+
+    // 负的 count：`range(-1)` 是空，Python 返回 `[]`，JS 也必须空。
+    expect(tickRects(withValue(baseTicks, 'count', -1))).toEqual([]);
+
+    expect(() => tickRects(withValue(baseTicks, 'count', 'abc'))).toThrow();
+    expect(() => tickRects(withValue(baseTicks, 'count', null))).toThrow();
+  });
+});
+
+describe('shapes: 不许就地改写传入的 geometry', () => {
+  // 原来的测试文件里只有一句注释声称「geometry 传浅拷贝，实现若就地改输入，后面几条
+  // 用例会立刻红」——这是**假保护**：给实现加一行 `g.__mutated = true`，85 条照样全绿，
+  // 因为没有任何断言在看输入。这里换成真断言：调用前后各拍一份深拷贝快照，逐键比对。
+  it('ticks_keeps_geometry_unmutated', () => {
+    for (const [, spec] of casesOf('ticks')) {
+      const el = element(spec);
+      const before = structuredClone(el.geometry);
+      tickRects(el);
+
+      // 键集合也要相等：多一个键（实现往里塞缓存/标记）同样是就地改写。
+      expect(Object.keys(el.geometry).sort()).toEqual(Object.keys(before).sort());
+      expect(el.geometry).toEqual(before);
+      for (const key of Object.keys(before)) {
+        expect(el.geometry[key]).toBe(before[key]);
+      }
+    }
+  });
+
+  it('outline_keeps_geometry_unmutated', () => {
+    for (const [, spec] of casesOf('outline')) {
+      const el = element(spec);
+      const before = structuredClone(el.geometry);
+      outlinePolyline(el);
+
+      expect(Object.keys(el.geometry).sort()).toEqual(Object.keys(before).sort());
+      expect(el.geometry).toEqual(before);
+      for (const key of Object.keys(before)) {
+        expect(el.geometry[key]).toBe(before[key]);
+      }
+    }
+  });
+
+  it('ticks_keeps_element_fields_unmutated', () => {
+    // `x_in` / `y_in` / `w_in` / `h_in` 同样不许被改（浮动的小抄）——
+    // 盒子是调用方的数据，挪一下能让后面算的 `right` 全错。
+    const el = element(FIXTURE['auto_layout:ticks_1']);
+    const before = { ...el };
+    tickRects(el);
+    expect(el).toEqual(before);
+
+    const elOutline = element(FIXTURE['auto_layout:outline_1']);
+    const beforeOutline = { ...elOutline };
+    outlinePolyline(elOutline);
+    expect(elOutline).toEqual(beforeOutline);
   });
 });

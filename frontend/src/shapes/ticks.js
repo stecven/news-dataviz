@@ -7,22 +7,7 @@
 // 像素换算属 T3 的事，本模块不碰 `PX_PER_IN`，也不产出任何颜色/字号——主题归
 // `theme.js`，这里只管几何。
 
-/**
- * 取 `geometry` 上的**必需**键。缺键就抛错，不兜默认值。
- *
- * Python 侧是 `int(g["count"])` / `float(g["len"])`，缺键直接 `KeyError`。JS 这边
- * `Number(undefined)` 会安静地变成 `NaN`（再往下就是一堆 `NaN` 坐标），所以显式
- * 拦一道：拼错参数名必须炸，而不是画到画布左上角。
- *
- * 与之相对，`pad_top` / `pad_bottom` / `flare_deg` 在 Python 里是**有意**的
- * `g.get(..., 默认值)`，那几个键不许拦（见各自的调用处）。
- */
-function required(geometry, key) {
-  if (!(key in geometry)) {
-    throw new Error(`ticks: geometry 缺少必需键 "${key}"`);
-  }
-  return Number(geometry[key]);
-}
+import { optional, required } from './required.js';
 
 /**
  * 把 `ticks` 元素展开成 `[[x, y, w, h], ...]`（英寸，y 向下）。
@@ -31,18 +16,22 @@ function required(geometry, key) {
  * 一段 inset：上让出半圆管口的圆顶（否则最上面一条会从弧顶戳出来），下让出锥形
  * 收口（原版刻度到颈口为止）。
  *
+ * 取参口径见 `required.js`：缺必需键抛错，非有限数值（`"abc"` / `null` / `NaN`）
+ * 也抛错——不然一串 `NaN` 会安静地流进 SVG 属性里。
+ *
  * @param {{x_in: number, y_in: number, w_in: number, h_in: number, geometry: object}} el
  * @returns {number[][]} 每个 `[x, y, w, h]`，**自下而上**排列。
  */
 export function tickRects(el) {
   const g = el.geometry || {};
   // Python 是 `int(g["count"])`，对浮点**向零截断**；照抄成 Math.trunc，不是 Math.round。
-  const count = Math.trunc(required(g, 'count'));
-  const length = required(g, 'len');
-  const thick = required(g, 'thick');
+  // 截断这一步留在调用处：`required()` 只保证「是个有限数字」，不保证是整数。
+  const count = Math.trunc(required(g, 'count', 'ticks'));
+  const length = required(g, 'len', 'ticks');
+  const thick = required(g, 'thick', 'ticks');
   // 这两个是可选的：Python 是 `g.get("pad_top", 0.0)`，缺键按 0 处理。
-  const padTop = 'pad_top' in g ? Number(g.pad_top) : 0.0;
-  const padBottom = 'pad_bottom' in g ? Number(g.pad_bottom) : 0.0;
+  const padTop = optional(g, 'pad_top', 0.0, 'ticks');
+  const padBottom = optional(g, 'pad_bottom', 0.0, 'ticks');
 
   const right = el.x_in + el.w_in;
   const top = el.y_in + padTop;

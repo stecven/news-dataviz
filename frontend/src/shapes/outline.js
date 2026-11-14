@@ -6,6 +6,8 @@
 //
 // 单位：输入输出**全是英寸**，y 向下。本模块不碰像素、不碰颜色与字号。
 
+import { optional, required } from './required.js';
+
 /**
  * 球泡外环与锥形收口在圆周上的接合角（度，自 +x 轴顺时针，y 向下）。
  *
@@ -13,19 +15,6 @@
  * `flare_deg` 时才用它。
  */
 const FLARE_DEG = 35.0;
-
-/**
- * 取 `geometry` 上的**必需**键：缺键抛错，不兜默认值。
- *
- * Python 是 `float(g["R"])`，缺键 `KeyError`。JS 的 `Number(undefined)` 会给 `NaN`
- * 且一路安静传下去，所以显式拦一道——拼错参数名必须炸。
- */
-function required(geometry, key) {
-  if (!(key in geometry)) {
-    throw new Error(`outline: geometry 缺少必需键 "${key}"`);
-  }
-  return Number(geometry[key]);
-}
 
 /**
  * 二次贝塞尔采样，**含两端点**：返回 `n + 1` 个点。
@@ -67,22 +56,23 @@ export function quad(p0, p1, p2, n = 6) {
  */
 export function outlinePolyline(el) {
   const g = el.geometry || {};
-  const R = required(g, 'R');
-  const capR = required(g, 'cap_r');
-  const neckH = required(g, 'neck_h');
+  // 取参口径见 `required.js`：缺键抛错，`"abc"` / `null` / `NaN` 这类非有限数值也抛错。
+  const R = required(g, 'R', 'outline');
+  const capR = required(g, 'cap_r', 'outline');
+  const neckH = required(g, 'neck_h', 'outline');
 
   // geometry 里的 cx / cy / cap_top / tube_bottom 是**创建时**的坐标系（内容坐标），
   // 而 el.x_in / el.y_in 是**当前**的外接盒（图框平移后是卡片坐标）。两者不一定同源，
   // 所以**一律以外接盒为锚**：geometry 只提供相对尺寸，位置由 bbox 决定。
   // bbox 左上角对应 (cx - R, cap_top)。
-  const ox = el.x_in - (required(g, 'cx') - R);
-  const oy = el.y_in - required(g, 'cap_top');
-  const cx = required(g, 'cx') + ox;
-  const cy = required(g, 'cy') + oy;
+  const ox = el.x_in - (required(g, 'cx', 'outline') - R);
+  const oy = el.y_in - required(g, 'cap_top', 'outline');
+  const cx = required(g, 'cx', 'outline') + ox;
+  const cy = required(g, 'cy', 'outline') + oy;
   const capTop = el.y_in;
-  const tubeBottom = required(g, 'tube_bottom') + oy;
+  const tubeBottom = required(g, 'tube_bottom', 'outline') + oy;
   // flare_deg 是可选的：Python 是 `g.get("flare_deg", _FLARE_DEG)`。
-  const flare = ((('flare_deg' in g ? Number(g.flare_deg) : FLARE_DEG)) * Math.PI) / 180;
+  const flare = (optional(g, 'flare_deg', FLARE_DEG, 'outline') * Math.PI) / 180;
 
   const pts = [];
 

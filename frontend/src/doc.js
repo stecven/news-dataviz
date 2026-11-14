@@ -35,6 +35,8 @@ const ELEMENT_TYPES = [
 
 const ELEMENT_REQUIRED = ['id', 'type', 'role', 'x_in', 'y_in', 'w_in', 'h_in'];
 const SPEC_REQUIRED = ['width_in', 'height_in', 'chart_key', 'chart_title', 'scale'];
+//: `$defs.scale.required`：缺任一项渲染就不知道值域/换算基准，必查。
+const SCALE_REQUIRED = ['v_max', 'h_in', 'unit'];
 const DOC_REQUIRED = [
   'version', 'theme', 'width_in', 'height_in', 'margin_in', 'gutter_in',
   'column_count', 'column_gutter_in', 'rows', 'cards', 'blocks', 'images',
@@ -125,7 +127,11 @@ function checkObject(node, path, required, numericKeys, errors) {
     }
   }
   for (const key of numericKeys) {
-    if (key in node && node[key] !== null && !isNumber(node[key])) {
+    // 这里**不放行 null**：`numericKeys` 里全是 schema 声明为 `{"type":"number"}`
+    // （或 `integer`）的坐标/尺寸键，可空的键（`font_pt` / `scale.factor` 等）
+    // 一个都没进来。Python 侧对 `x_in: null` 报 `expected number, got null`，
+    // 这里必须同口径 —— 早先的 `!== null` 豁免会让所有数值键的 null 静默通过。
+    if (key in node && !isNumber(node[key])) {
       errors.push({ path: `${path}.${key}`, message: `expected number, got ${kind(node[key])}` });
     }
   }
@@ -146,8 +152,9 @@ function checkArray(node, path, errors, each) {
  * 严格校验一份图纸，不合规抛 {@link ContractError}。
  *
  * 校验范围（**受限子集**，见文件头）：顶层必备键与数值类型、`cards[].spec`
- * 的必备键、`elements[]` 的必备键 + `type` 枚举 + 四个坐标字段的数值类型，
- * `rows` / `blocks` / `images` 是数组。**不**求值 JSON Schema、**不**查未知键。
+ * 的必备键、`spec.scale` 的必备键与 `v_max` / `h_in` 的数值类型、`elements[]`
+ * 的必备键 + `type` 枚举 + 四个坐标字段的数值类型，`rows` / `blocks` / `images`
+ * 是数组。**不**求值 JSON Schema、**不**查未知键。
  *
  * @param {object} doc
  * @throws {ContractError} 结构不符；`err.errors` 带逐条 `{path, message}`
@@ -184,6 +191,12 @@ export function assertDoc(doc) {
     checkObject(card, path, [], ['x_in', 'y_in', 'w_in', 'h_in'], errors);
     const specPath = `${path}.spec`;
     if (checkObject(card.spec, specPath, SPEC_REQUIRED, ['width_in', 'height_in'], errors)) {
+      // `scale` 以前只当存在性键，从不递归 —— 于是 `scale='oops'` / `scale=null` /
+      // `scale={}` / 删 `unit` / 删 `v_max` / `h_in='x'` 六种在 Python 全报错、JS 全放行。
+      // schema 的 `$defs.scale` 是 object 且 required=['v_max','h_in','unit']，
+      // v_max / h_in 为 number。这一行补上子结构：非对象报 `expected dict, got ...`，
+      // 缺键报 `required key is missing`，数值键类型错报 `expected number, got ...`。
+      checkObject(card.spec.scale, `${specPath}.scale`, SCALE_REQUIRED, ['v_max', 'h_in'], errors);
       checkArray(card.spec.elements, `${specPath}.elements`, errors, (el, elPath) => {
         if (!checkObject(el, elPath, ELEMENT_REQUIRED,
           ['x_in', 'y_in', 'w_in', 'h_in'], errors)) {

@@ -48,8 +48,25 @@ describe('units: 盒子四元组', () => {
   });
 
   it('box_rounds_each_coordinate_separately', () => {
-    // x1 = 0.45 + 5.172 = 5.622 → 562.2 → round 562；y1 = 0.3 + 0.5 = 0.8 → 80
-    expect(boxPxRound(box)).toEqual([45, 30, 562, 80]);
+    // 这条与下面 `box_trunc_and_round_differ_on_real_card_frame` 各管一半：
+    //   本条管**四舍五入**本身（四个坐标都落在 .5 以下但非零小数位），
+    //   :55 管两套口径**不可互换**（真实卡片 frame 上差 1px）。
+    //
+    // 夹具必须挑得让 round 与 trunc 在**四个坐标上全都不同**，否则把
+    // `boxPxRound` 误实现成走 trunc 时这条不会红 —— 之前用上面那个 `box`
+    // （0.45/0.3/5.172/0.5，四个数都是整 px）就正是这个问题：两套口径同值，
+    // 断言看起来在测四舍五入，实际什么都没测。
+    //   实测（node 直跑 boxPxRound / boxPxTrunc）：
+    //     round: [45, 31, 145, 131]
+    //     trunc: [44, 30, 144, 130]
+    //   x0 = 0.446 → 44.6 → round 45 / trunc 44
+    //   y0 = 0.306 → 30.6 → round 31 / trunc 30
+    //   x1 = 0.446+1 = 1.446 → 144.6 → round 145 / trunc 144
+    //   y1 = 0.306+1 = 1.306 → 130.6 → round 131 / trunc 130
+    const roundBox = { x_in: 0.446, y_in: 0.306, w_in: 1.0, h_in: 1.0 };
+    expect(boxPxRound(roundBox)).toEqual([45, 31, 145, 131]);
+    // 对照组：同输入走截断必须**全部**不同（区分力自检，不是重复断言）。
+    expect(boxPxTrunc(roundBox)).toEqual([44, 30, 144, 130]);
   });
 
   it('box_trunc_and_round_differ_on_real_card_frame', () => {

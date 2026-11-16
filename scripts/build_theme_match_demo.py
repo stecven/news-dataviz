@@ -7,11 +7,12 @@
   但那张图已被这一页用过，于是**降级**到图表语义「占比构成」→ `people.png`
   —— 正是用户 m06739 裁定的那条路径。两张图 ``asset_id`` 不同。
 
-  注意（用户 m05779 之后）：温度计在这一栏里装不下，会被升到整行，右侧再没有
-  并排位置；整页放不下两张插图，编排层就丢掉被挤下来的那张（暖气片），并在
-  ``flow.json`` 的 ``notes`` 里记一条 ``illustration_dropped``。所以这一页实际
-  留下的是**降级**那张 —— 放大带照实标注，不再假装两张都在。选图的决策树本身
-  没变（``summary.json`` 里两段的 ``matched_by`` 照旧是 theme / chart_semantic）。
+  注意（用户 m05920 之后）：温度计在这一栏里装不下，会被升到整行，右侧再没有
+  并排位置；编排层先把原本并排的插图**收拢**到下一行、让紧随其后的那段正文退回
+  单栏去填空栏 —— 插图不再白占一整行，两张插图因此都留在页面上，``flow.json``
+  的 ``notes`` 里记一条 ``illustration_tucked``。只有收拢也装不下时才回到
+  m05779 的丢图策略（``illustration_dropped``）。选图的决策树本身没变
+  （``summary.json`` 里两段的 ``matched_by`` 照旧是 theme / chart_semantic）。
 * ``_no_theme/``：稿子只提图表语义、一个主题词都不含（讲的是「加热电器」，
   不是主题词表里的词）→ 每段 ``theme`` 都是 ``None``，插图回落到按
   ``chart_semantic`` 选。用来证明降级路径不是摆设。
@@ -72,8 +73,8 @@ def _report(result) -> dict:
                      "illustration": match.illustration,
                      # ``picked_basis`` 是**选图决策树**的结果（theme /
                      # chart_semantic），``on_page`` 说明这张图有没有真的排上
-                     # 这一页 —— 用户 m05779 之后两者可能不一致（升栏卡片把
-                     # 插图挤掉），所以分开记，别让汇报看起来像选图坏了。
+                     # 这一页 —— 用户 m05920 之后编排层先收拢、收不拢才丢图，
+                     # 两者正常一致；分开记是为了不一致时一眼看得出是哪一步丢的。
                      "picked_basis": match.illustration_basis,
                      "on_page": picked is not None,
                      "asset_id": picked["asset_id"] if picked else None,
@@ -114,9 +115,8 @@ def _contact_sheet(a: str, b: str):
 
     # 放大带按**页面上真实存在的插图**生成，一张一条：``tag != semantic`` 就是
     # 按主题选的（标注「主题命中」），否则是被占用后降级（标注「被占用后降级」）。
-    # 用户 m05779 之后不再假设"一定有两张"：升到整行的温度计右侧放不下插图，
-    # 整页装不下时编排层会丢掉被挤下来的那张（这里原来写死 images[0]/[1]，
-    # 丢一张就 IndexError）。
+    # 用户 m05920 之后不再假设"一定有两张"：编排层先收拢、收不拢才丢掉被挤下来
+    # 的那张（这里原来写死 images[0]/[1]，少一张就 IndexError）。
     page = json.load(open(os.path.join(OUT, "pagelayout.json"), encoding="utf-8"))
     bands = []
     for img in page["images"]:

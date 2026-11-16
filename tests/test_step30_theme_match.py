@@ -244,19 +244,26 @@ class TestComposeThemeFlow(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(out, "preview.png")))
         with open(page_spec_path(out), encoding="utf-8") as fh:
             page = json.load(fh)
-        # 升到整行的温度计右侧再没有并排位置，整页因此装不下 —— 编排层按用户
-        # m05779 裁定 ② 丢掉被挤下来的那一张（只丢插图，卡片与文字一个不丢）。
+        # 两张插图都留在页面上（用户 m05920）：升到整行的温度计自己占一行，它旁边
+        # 那张插图顺延到下一行、与**退回单栏**的正文并排，不再白占一整行 —— 整页
+        # 因此装得下，用不着丢图。
         self.assertEqual([img["name"] for img in page["images"]],
-                         ["illustration_26"])
+                         ["illustration_17", "illustration_26"])
         with open(os.path.join(out, "flow.json"), encoding="utf-8") as fh:
             flow = json.load(fh)
         self.assertIn("themes", flow)
         self.assertTrue(any(it["kind"] == "image" for it in flow["flow"]))
         self.assertEqual([n["images"] for n in flow["notes"]
-                          if n["kind"] == "illustration_dropped"],
+                          if n["kind"] == "illustration_tucked"],
                          [["illustration_17"]])
-        self.assertEqual([m["illustration"] for m in flow["matches"]
-                          if m["dataset_key"] == "heat_ratio_top5"], [None])
+        self.assertEqual([n for n in flow["notes"]
+                          if n["kind"] == "illustration_dropped"], [])
+        # 选图阶段选中的两张插图都真的排上了页 —— 主题命中的暖气片没被布局丢掉。
+        matched = {m["dataset_key"]: m for m in flow["matches"]}
+        self.assertEqual(matched["heat_ratio_top5"]["illustration"],
+                         "illustration_17")
+        self.assertEqual(matched["heat_ratio_top5"]["illustration_basis"], "theme")
+        self.assertEqual(matched["heat_age"]["illustration"], "illustration_26")
 
     def test_to_dict_carries_themes(self):
         data = self.result.to_dict()
@@ -268,11 +275,13 @@ class TestComposeThemeFlow(unittest.TestCase):
 class TestLayoutStructureUnchanged(unittest.TestCase):
     """排版结构没动：只换了插图来源。
 
-    整版要从**生产入口** ``compose_page`` 取：用户 m05779 之后，2 栏 15 in 的
-    版面装不下「升栏卡片 + 两张插图」（温度计升到整行后变高，整页 15.49 in >
-    15.00 in），编排层会丢掉被升栏挤下来的那一张插图并记一条 note。手动
-    ``flow_layout(build_flow(...).flow)`` 是**不带丢图策略**的低层路径，照旧
-    如实抛 ``LayoutOverflowError``（下面有一条用例守着这个分工）。
+    整版要从**生产入口** ``compose_page`` 取。用户 m05920 之后，2 栏 15 in 的版面
+    在「温度计升到整行」时，原本并排在它右边的那张插图只能顺延到下一行、白占一整
+    行（整页 15.49 in > 15.00 in）；编排层先试**收拢**（把这张插图收进下一行、让
+    紧随其后的那段正文退回单栏填空栏），收不拢才丢图。
+
+    手动 ``flow_layout(build_flow(...).flow)`` 是**不带收拢与丢图策略**的低层路径，
+    照旧如实抛 ``LayoutOverflowError``（下面有一条用例守着这个分工）。
     """
 
     def setUp(self):
@@ -291,24 +300,54 @@ class TestLayoutStructureUnchanged(unittest.TestCase):
         self.assertEqual(title.x_in, self.layout.margin_in)
         self.assertEqual(title.w_in, self.layout.usable_width_in)
 
-    def test_paragraphs_are_still_split_into_two_columns(self):
-        split = [b for b in self.page.blocks if len(b.line_groups) > 1]
+    def test_two_column_paragraphs_keep_the_full_page_width(self):
+        # 块内分栏本身没动：声明了 2 栏的段落照样占满整行 9.2 in。这段演示文字只
+        # 有一行，均衡分栏后只落在第 1 栏（``balance_lines`` 丢掉空栏，所以
+        # ``line_groups`` 是 1）—— 这里验的是**声明与宽度**；真的分成两组的用例
+        # 在 ``tests/test_step27_multicol.py``。
+        split = [b for b in self.page.blocks if b.block.columns > 1]
         self.assertTrue(split)
         for block in split:
-            self.assertEqual(len(block.line_groups), 2)
+            self.assertEqual(block.block.columns, 2)
             self.assertEqual(block.w_in, self.layout.usable_width_in)
+
+    def test_tucked_illustration_narrows_the_paragraph_beside_it(self):
+        # 收拢的代价是**明确**的：那一段正文从整行 2 栏退回单栏 4.5 in，去填插图
+        # 旁边空出来的那一栏（用户 m05920）。不这么做，插图就白占一整行、整页装
+        # 不下，只能丢掉主题命中的那张图。
+        image = self.page.image("illustration_17")
+        beside = [b for b in self.page.blocks
+                  if abs(b.y_in - image.y_in) < 1e-6]
+        self.assertEqual(len(beside), 1)          # 与插图同行
+        self.assertEqual(beside[0].block.columns, 1)
+        self.assertEqual(beside[0].w_in, self.layout.column_width_in)
+        self.assertGreater(beside[0].h_in, 0)
 
     def test_card_and_illustration_share_a_row(self):
         # 行里存的是**名字**（``rows[i]["cards"]``/``["images"]``），要回查坐标。
-        for row in self.page.rows:
-            names = row.get("images") or []
-            if not names:
-                continue
+        # 升到整行的温度计独占一行；另一张插图照旧与它配对的卡片并排：卡左图右。
+        shared = [row for row in self.page.rows
+                  if row.get("cards") and row.get("images")]
+        self.assertTrue(shared)
+        for row in shared:
             self.assertEqual(len(row["cards"]), 1)
             card = self.page.card(row["cards"][0])
-            image = self.page.image(names[0])
+            image = self.page.image(row["images"][0])
             self.assertAlmostEqual(card.y_in, image.y_in, places=6)
             self.assertLess(card.x_in, image.x_in)
+
+    def test_promoted_card_sits_alone_and_centred(self):
+        # 温度计升到整行后确实独占一行（这一行没有插图并排，否则它旁边那张插图就
+        # 不会被挤到下一行，也就没有 m05920 这个问题了）；而且记录的是**真实外
+        # 框**、居中留白（用户 m05779 口径 (a)），不是分配的格子宽。
+        alone = [row for row in self.page.rows if not row.get("images")
+                 and row.get("cards")]
+        self.assertEqual([row["cards"] for row in alone], [["heat_ratio_top5"]])
+        card = self.page.card("heat_ratio_top5")
+        self.assertLess(card.w_in, self.layout.usable_width_in)
+        expected_x = self.layout.margin_in + (self.layout.usable_width_in
+                                              - card.w_in) / 2.0
+        self.assertAlmostEqual(card.x_in, expected_x, places=6)
 
     def test_nothing_overlaps_and_everything_is_inside_the_margins(self):
         boxes = [(c.x_in, c.y_in, c.w_in, c.h_in) for c in self.page.cards]
@@ -337,6 +376,64 @@ class TestLayoutStructureUnchanged(unittest.TestCase):
         _, _, fitted_w, fitted_h = fit_rect_in(block.w_in, block.h_in, aspect)
         self.assertAlmostEqual(dw, fitted_w, places=5)
         self.assertAlmostEqual(dh, fitted_h, places=5)
+
+
+class TestSpilledIllustrationTuck(unittest.TestCase):
+    """升栏卡片旁边的插图**收拢**进下一行的空栏，不再丢图（用户 m05920）。
+
+    用户 m05779 之后，主题稿里温度计升到整行 → 原本并排在它右边的那张插图顺延到
+    下一行、白占一整行 → 整页 15.49 in > 15.00 in，编排层只好丢掉**主题命中**的
+    暖气片，留下降级候选 people（basis=chart_semantic）。m05920 改成先收拢：让这张
+    插图与**退回单栏**的下一段正文并排，两张图都留下。收不拢才回到丢图那条路。
+    """
+
+    def setUp(self):
+        self.layout = LayoutSpec(column_count=2)
+        self.result = compose_page(COPY, mkdtemp(), column_count=2)
+
+    def test_theme_illustration_survives_the_overflow(self):
+        # 上游按主题选中的暖气片必须留在页面上 —— 这是这次修复的全部意义。
+        self.assertEqual([img.block.name for img in self.result.page.images],
+                         ["illustration_17", "illustration_26"])
+
+    def test_tuck_is_recorded_as_a_tuck_not_a_drop(self):
+        self.assertEqual([n["kind"] for n in self.result.notes],
+                         ["illustration_tucked"])
+        self.assertEqual(self.result.notes[0]["images"], ["illustration_17"])
+        self.assertTrue(self.result.notes[0]["reason"])
+
+    def test_page_size_contract_is_untouched(self):
+        # 页面尺寸契约一个字没改：还是 10 × 15 in，靠重新分配版面装下的。
+        self.assertEqual(self.result.page.width_in, 10.0)
+        self.assertEqual(self.result.page.height_in, 15.0)
+        for item in list(self.result.page.images) + list(self.result.page.cards):
+            self.assertLessEqual(item.y_in + item.h_in,
+                                 self.layout.height_in - self.layout.margin_in + 1e-6)
+
+    def test_geometry_and_font_floor_are_untouched(self):
+        # 收拢只挪位置，不碰图形：管身宽高比照旧是设计比（±5%，与验收探针同口径），
+        # 卡片里每个文本元素的渲染字号仍在 6 pt 以上（用户 m04205 / m05779）。
+        from loop.palette import MIN_FONT_PT
+        card = self.result.page.card("heat_ratio_top5")
+        tube = next(el for el in card.spec.elements if el.role == "track")
+        self.assertAlmostEqual(tube.w_in / tube.h_in, 0.28 / 3.00,
+                               delta=0.05 * (0.28 / 3.00))
+        fonts = [el.font_pt for el in card.spec.elements
+                 if el.type == "text" and el.text and el.font_pt is not None]
+        self.assertTrue(fonts)
+        self.assertGreaterEqual(min(fonts), MIN_FONT_PT - 1e-9)
+
+    def test_drop_path_still_records_its_reason(self):
+        # 收拢这条路被堵死时（这里把探针按「这一页没有可收拢的地方」伪造），编排层
+        # 回到 m05779 的裁定 ②：丢插图，并且必须留下**可追踪的原因**。
+        with mock.patch("loop.compose._tuck_spilled_illustrations",
+                        return_value=([], [])):
+            result = compose_page(COPY, mkdtemp(), column_count=2)
+        self.assertEqual([img.block.name for img in result.page.images],
+                         ["illustration_26"])
+        dropped = [n for n in result.notes if n["kind"] == "illustration_dropped"]
+        self.assertEqual([n["images"] for n in dropped], [["illustration_17"]])
+        self.assertTrue(dropped[0]["reason"])
 
 
 if __name__ == "__main__":

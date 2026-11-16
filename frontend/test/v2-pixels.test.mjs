@@ -422,8 +422,27 @@ function fmt(result) {
  * - `ticks` 的 1 单位取整差（金样本 201,201,201 vs 我方 200,200,201，1 个像素）。
  */
 function expectEdgeShareOfDiff(result, label) {
+  // 「其余差异打印出来」不能只靠 console.log（评审 I-3 / M9：`innerSampleLimit` 从 40
+  // 改成 0 → 48 条全绿，诊断通道可以被完全关掉而无人发现）。这里钉住「有内部差就必须
+  // 有样本」：样本数是这条诊断的唯一可观测产物。
+  // 用 `> 0` 而不是 `=== innerDiff`：`innerSamples` 有 `innerSampleLimit`（默认 40）条
+  // 截断上限，内部差一旦超过 40 就会不等，那样会误红。
+  if (result.innerDiff > 0) {
+    expect(
+      result.innerSamples.length,
+      `${label}: 内部差 ${result.innerDiff} 个却一个样本都没采到，诊断通道被关掉了`,
+    ).toBeGreaterThan(0);
+  }
   if (result.diffCount === 0) {
     // 一个差异都没有就没有「占比」可言 —— 打印出来，别静默通过。
+    //
+    // ⚠️ 这个早退分支会**跳过**下面「描边差 ≥60%」的断言，所以它只能在「零差异是
+    // 真实的」路径上可达。当前唯一一行是 `auto_layout/_plain` 的整页全画面口径
+    // （实测 considered=1389120、exact=100.00%、diff=0：那张图上除文字外全是纯色
+    // 背景，没有任何需要抗锯齿的形状）。**主判据（卡片级）与页区判据的调用点各自
+    // 都先 pin 了 `diffCount > 0`**，因此本函数在这些路径上不可能走进这里 —— 否则把
+    // `withinOnePixel` 放宽成恒真（`displaced = true`）就能让「1px 容差判据」与
+    // 「差值记账判据」同时静默通过（评审 I-1 / M3：48 条只红 1 条）。
     console.log(`[${label}] 零差异，无需记账`);
     return;
   }
@@ -618,6 +637,13 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V2 像素对拍（11 份 demo 图纸�
             result.within1Pct,
             `${sample.name}/全画面: 1px 容差 ${result.within1Pct.toFixed(2)}% < ${MIN_WITHIN_1PX_PCT}%`,
           ).toBeGreaterThanOrEqual(MIN_WITHIN_1PX_PCT);
+          // ⚠️ 这里**故意不加** `expect(result.diffCount).toBeGreaterThan(0)`：
+          // 本档（`auto_layout/_plain`，0 卡 3 块）实测 considered=1389120、exact=100.00%、
+          // diff=0 —— 整页除文字外全是纯色背景与分栏直线，没有任何抗锯齿形状，
+          // 零差异是**真实结果**而不是判据失效。硬钉 diffCount > 0 会把这条改红。
+          // 该档位的真实护栏是上面的 `considered > 0` 与 `within1Pct ≥ 98`：
+          // 一旦掩膜掩错或渲染崩掉，exact 就不再是 100%、within1Pct 会掉下来。
+          // 其余所有调用点（卡片级主判据 / 页区 / 组 5 三口径）都先 pin 了 diffCount > 0。
           expectEdgeShareOfDiff(result, `${sample.name}/全画面`);
         },
       );
@@ -665,6 +691,17 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V2 像素对拍（11 份 demo 图纸�
             const result = await comparePixels(gold, mine, mask);
             console.log(`  [${sample.name}/${card.name}] ${fmt(result)}`);
             expect(result.considered, '非文字像素太少，掩膜算错了').toBeGreaterThan(0);
+            // 主判据必须先钉住「真的有差异」：`expectEdgeShareOfDiff` 在 diffCount === 0
+            // 时早退，不跑「描边差 ≥60%」那条断言。而 `comparePixels` 的 1px 容差
+            // （`withinOnePixel`）一旦被放宽成恒真，diffCount 就恒 0、within1Pct 恒 100，
+            // 两条主判据会**同时**静默变绿 —— 评审 M3 实测：48 条只红 1 条，红的那条是
+            // 平局账本，卡级与整页主判据全绿。实测本口径 diffCount=822 / 536（卡1/卡2），
+            // 余量充足，钉死 > 0 不会误红。
+            expect(
+              result.diffCount,
+              `${sample.name}/${card.name}: 一个差异都没数到（diffCount=0），`
+              + '说明 1px 容差被放宽成了恒真或掩膜掩掉了整张卡，差值记账判据失效',
+            ).toBeGreaterThan(0);
             expect(
               result.within1Pct,
               `${sample.name}/${card.name}: 1px 容差 ${result.within1Pct.toFixed(2)}%`
@@ -695,6 +732,13 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V2 像素对拍（11 份 demo 图纸�
           );
           expect(result.considered).toBeGreaterThan(0);
           expect(result.considered).toBeLessThanOrEqual(regionArea);
+          // 同卡片级主判据：这里也必须钉住 diffCount > 0，否则 `expectEdgeShareOfDiff`
+          // 的早退会让「描边差 ≥60%」在整页口径上不可 falsify。实测 diffCount=1358。
+          expect(
+            result.diffCount,
+            `${sample.name}/页区: 卡片区域内一个差异都没数到（diffCount=0），`
+            + '说明 1px 容差被放宽成了恒真或掩膜算错，差值记账判据失效',
+          ).toBeGreaterThan(0);
           expect(
             result.within1Pct,
             `${sample.name}/页区: 1px 容差 ${result.within1Pct.toFixed(2)}%`
@@ -793,6 +837,12 @@ describe.skipIf(!HAS_GOLDEN)('金样本：任务书三个口径的数字', () =>
         rows.push({ label: `${card.name} (${gold.width}×${gold.height})`, result });
         console.log(`  ${rows[rows.length - 1].label}: ${fmt(result)}`);
         expect(result.within1Pct).toBeGreaterThanOrEqual(MIN_WITHIN_1PX_PCT);
+        // 与主判据同理：不钉 diffCount > 0 的话，`expectEdgeShareOfDiff` 的早退会让
+        // 「描边差 ≥60%」在这三档数字上一起变成不可 falsify（评审 I-1 / M3）。
+        expect(
+          result.diffCount,
+          `口径/${card.name}: diffCount=0，1px 容差恒真或掩膜算错，差值记账判据失效`,
+        ).toBeGreaterThan(0);
         expectEdgeShareOfDiff(result, `口径/${card.name}`);
       }
 
@@ -806,6 +856,11 @@ describe.skipIf(!HAS_GOLDEN)('金样本：任务书三个口径的数字', () =>
       console.log(`  整页卡片区域: ${fmt(regionResult)}`);
       expect(regionResult.considered).toBe(356810);
       expect(regionResult.within1Pct).toBeGreaterThanOrEqual(MIN_WITHIN_1PX_PCT);
+      // 同主判据页区口径：钉住真有差异，避免早退把「描边差 ≥60%」变成不可 falsify。
+      expect(
+        regionResult.diffCount,
+        `口径/整页卡区: diffCount=0，1px 容差恒真或掩膜算错，差值记账判据失效`,
+      ).toBeGreaterThan(0);
       expectEdgeShareOfDiff(regionResult, '口径/整页卡区');
 
       // 整页**全画面**口径：只打印，不设判据。这里的大头是插图位图重采样

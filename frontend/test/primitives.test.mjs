@@ -35,6 +35,13 @@ const SAMPLE = resolve(HERE, '../../out/demo/auto_layout/pagelayout.json');
 const HAS_SAMPLE = existsSync(SAMPLE);
 const PAGE = HAS_SAMPLE ? JSON.parse(readFileSync(SAMPLE, 'utf8')) : null;
 
+// 下面这三个是**另一个**夹具：`out/demo/page/pagelayout.json`，与上面的 `SAMPLE`
+// （`out/demo/auto_layout/pagelayout.json`）不是同一个文件，别合并。放在模块作用域是为了
+// 能用在 `describe.skipIf` 守卫上（放在回调里就用不了，无金样本时整组会红）。
+const PAGE_SAMPLE = resolve(HERE, '../../out/demo/page/pagelayout.json');
+const HAS_PAGE_SAMPLE = existsSync(PAGE_SAMPLE);
+const PAGE_SAMPLE_DOC = HAS_PAGE_SAMPLE ? JSON.parse(readFileSync(PAGE_SAMPLE, 'utf8')) : null;
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** 新建一个挂到 body 的 `<svg>` 当父节点，返回 `[svg, theme]`。 */
@@ -431,13 +438,9 @@ describe.skipIf(!HAS_SAMPLE)('renderText（card 模式）', () => {
   });
 });
 
-describe('renderElement（其余图元，Step 4 判据）', () => {
-  const PAGE_SAMPLE = resolve(HERE, '../../out/demo/page/pagelayout.json');
-  const HAS_PAGE = existsSync(PAGE_SAMPLE);
-  const PAGE_DOC = HAS_PAGE ? JSON.parse(readFileSync(PAGE_SAMPLE, 'utf8')) : null;
-
+describe.skipIf(!HAS_PAGE_SAMPLE)('renderElement（其余图元，Step 4 判据）', () => {
   function pageElementById(id) {
-    for (const card of PAGE_DOC.cards) {
+    for (const card of PAGE_SAMPLE_DOC.cards) {
       for (const el of card.spec.elements) {
         if (el.id === id) return structuredClone(el);
       }
@@ -687,7 +690,7 @@ describe('renderElement（其余图元，Step 4 判据）', () => {
     const { renderElement } = await import('../src/render/primitives.js');
     const svg = document.createElementNS(SVG_NS, 'svg');
     document.body.appendChild(svg);
-    const theme = createTheme(PAGE_DOC.theme);
+    const theme = createTheme(PAGE_SAMPLE_DOC.theme);
     const el = pageElementById('placeholder_1');
     expect(el.image_path).toBe('assets/placeholders/placeholder_todo.png');
 
@@ -725,7 +728,7 @@ describe('renderElement（其余图元，Step 4 判据）', () => {
     const { renderElement } = await import('../src/render/primitives.js');
     const svg = document.createElementNS(SVG_NS, 'svg');
     document.body.appendChild(svg);
-    const theme = createTheme(PAGE_DOC.theme);
+    const theme = createTheme(PAGE_SAMPLE_DOC.theme);
     const el = pageElementById('placeholder_1');
     const warnings = [];
 

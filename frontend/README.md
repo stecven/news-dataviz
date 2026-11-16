@@ -271,18 +271,15 @@ cd .. && python -m unittest discover -s tests -t . -q     # 722 条
 **金样本在 `out/`，而 `out/` 被 gitignore。** 全新克隆上 `out/demo/**/pagelayout.json`
 与 `out/demo/**/preview.png` 都不存在，此时：
 
-- 依赖金样本的组会**整组 skip**（`stage.test.mjs` 47 条全组 skip、`primitives.test.mjs` 的
-  `renderText（card 模式）` 16 条、`doc` 6 条、`theme` 8 条、`v1-structure` 5 条、`v2-pixels` 5 条）。
-  本机全量是 `8 files / 421 tests`；无金样本时是 `Tests 242 passed | 87 skipped`，
-  另有下面第三条说的 15 条红。**skip 本身是设计如此，不是坏了。**
+- 依赖金样本的组会**整组 skip**（`stage.test.mjs` 47 条、`primitives.test.mjs` 31 条、
+  `doc.test.mjs` 6 条、`theme.test.mjs` 8 条、`v1-structure.test.mjs` 5 条、
+  `v2-pixels.test.mjs` 5 条，合计 102 条）。本机全量是 `8 files / 421 tests`；
+  无金样本时是 `Tests 242 passed | 102 skipped (344)`、`0 failed`，退出码 0。
+  **skip 本身是设计如此，不是坏了。**
+- `renderElement（其余图元）` 那 15 条同样依赖 `out/demo/page/` 的金样本，无样本时整组 skip。
 - 兜底靠**不依赖金样本的「合成 doc」判据**：V2 那 10 条（光栅化尺寸与背景色 4 条、
   0.5 平局 half-to-even 3 条、文字掩膜口径护栏 3 条）与 V1 的 7 条，手写极简 doc 现场断言，
   永远真跑。不许让整组在 fresh clone 上静默全绿。
-- **已知缺口（登记在此，不在 P2 范围）**：`primitives.test.mjs` 的
-  `renderElement（其余图元，Step 4 判据）` 那组**没挂 `skipIf`**，它的 `stage()` 辅助函数
-  直接读 `PAGE.theme`。所以无金样本时它会以
-  `TypeError: Cannot read properties of null (reading 'theme')` 红 **15 条**——
-  「fresh clone 全绿」目前**不成立**，成立的只是「合成 doc 那 17 条永远真跑」。
 - 要真跑金样本组，先生成它们：`python scripts/build_theme_match_demo.py` /
   `build_multicol_demo.py` / `build_illustrated_demo.py` 等（产出落在 `out/demo/`）。
 

@@ -277,14 +277,19 @@ const SYNTH_THEME = {
 };
 
 /**
- * 极简合成图纸：1 张卡片（3 个元素）+ 1 个页级块。
+ * 极简合成图纸：1 张卡片（4 个元素）+ 1 个页级块。
  *
- * 三个元素故意覆盖三条公式分支：
+ * 四个元素故意覆盖四条公式分支：
  * - `frame`：`rect` → 1 个节点；且 `x_in = 0` 而卡片 `x_in = 0.4`，
  *   所以它的 `x` 属性必须是 `0`（相对卡片）而不是 `40`（Review Focus #4）。
  * - `headline`：`text` 但给了 **5 行** → `1 + min(5, 4) = 5` 个节点，
  *   去掉 `min(行数, 4)` 就会变 6 个（11 份金样本抓不到这条，只能靠合成用例）。
  * - `dot`：`ellipse` → 1 个节点。
+ * - `chart_tile`：`type: 'chart'` → **占位分支**（`primitives.js::placeholder()`）→
+ *   1 个虚线 `<rect>` + 一个**不带** `data-el-id` 的 `<title>`。
+ *   11 份金样本里 `type='chart'` 与未知 type 各 **0** 个、没有 `image_path` 的插图
+ *   也 **0** 个 ⇒ 只靠金样本时这条分支从未被执行，给占位框的 `<title>` 打上
+ *   `data-el-id` 也能存活（评审 S5）。这个元素就是为了把那条分支真正跑起来。
  */
 const SYNTH_DOC = {
   version: '1.0',
@@ -344,6 +349,19 @@ const SYNTH_DOC = {
             w_in: 1,
             h_in: 1,
             fill: '1F4E79',
+          },
+          {
+            // 未实现的图表类型：`renderElement()` 第 2 条分支 → `placeholder()`。
+            // 盒 2.5,2.0 → 4.0,2.8（英寸边界在二进制里是精确值，trunc 后是
+            // [250,200,400,280]）。刻意避开 2.4+1.2=3.5999999999999996 这种
+            // 会因浮点截断掉 1px 的边界，免得这条断言在讲别的事。
+            id: 'chart_tile',
+            type: 'chart',
+            role: 'chart',
+            x_in: 2.5,
+            y_in: 2,
+            w_in: 1.5,
+            h_in: 0.8,
           },
         ],
       },
@@ -409,22 +427,30 @@ describe('golden helpers', () => {
 
 // ---------------------------------------------------------------------------
 describe('合成 doc（不依赖金样本）', () => {
-  it('节点数由公式推导：1 卡（rect + 5 行 text + ellipse）+ 1 块', () => {
+  it('节点数由公式推导：1 卡（rect + 5 行 text + ellipse + chart 占位）+ 1 块', () => {
     const svg = renderFree(SYNTH_DOC);
     const doc = SYNTH_DOC;
 
-    // 卡片内：frame 1 + headline(1 个 <g> + min(5, 4) 行) 5 + dot 1 = 7
+    // 卡片内：逐元素累加（与 `expectedCardNodes` 同口径，但在这里**独立写一遍**，
+    // 免得「用被测的公式算期望」）。分支顺序同 `classifyElement`：
+    //   text → 1 个 <g> + min(非空行数, 4) 个 <text>
+    //   chart / 未知 type → 占位 1 个 <rect>（挂的 <title> 不带 data-el-id，不计入）
+    //   rect / ellipse / 其它形状 → 1
+    const elements = SYNTH_DOC.cards[0].spec.elements;
+    expect(elements).toHaveLength(4); // 夹具形状护栏（不是节点数）
     let expectedCard = 0;
-    expectedCard += 1; // frame：rect
-    expectedCard += 1 + Math.min(5, MAX_LINES); // headline：<g> + 前 4 行 <text>
-    expectedCard += 1; // dot：ellipse
-    expect(expectedCard).toBe(7);
+    for (const el of elements) {
+      if (el.type === 'text') expectedCard += 1 + Math.min((el.lines || []).length, MAX_LINES);
+      else if (el.type === 'ticks') expectedCard += Math.trunc((el.geometry || {}).count || 0);
+      else expectedCard += 1;
+    }
 
     // 页面级：synth_block = 1 个 <g> + 1 行 <text> = 2
     let expectedPage = 0;
-    expectedPage += 1; // 一个 line_group → 一个 <g>
-    expectedPage += 1; // 一行非空 <text>
-    expect(expectedPage).toBe(2);
+    for (const group of SYNTH_DOC.blocks[0].line_groups) {
+      expectedPage += 1; // 一个 line_group → 一个 <g>
+      expectedPage += group.filter((line) => line !== '').length; // 非空行 → <text>
+    }
 
     expect(actualCardNodes(svg)).toEqual({ synth_card: expectedCard });
     expect(actualPageNodes(svg)).toBe(expectedPage);
@@ -433,6 +459,30 @@ describe('合成 doc（不依赖金样本）', () => {
     // 与「公式推导」这条实现对齐：同一个 doc 走 helper 应得同样的数
     expect(expectedCardNodes(doc.cards[0])).toBe(expectedCard);
     expect(expectedPageNodes(doc)).toBe(expectedPage);
+  });
+
+  it('chart 占位：1 个 <rect>，挂的 <title> 不带 data-el-id（不计入节点数）', () => {
+    const svg = renderFree(SYNTH_DOC);
+    const nodes = collectByElId(svg).get(cardKey('synth_card', 'chart_tile'));
+    expect(nodes, 'type="chart" 的元素没有渲染出带 data-el-id 的节点').toBeDefined();
+
+    // 1) 只有 1 个带 data-el-id 的节点，且就是那个虚线框 <rect>
+    expect(nodes).toHaveLength(1);
+    const box = nodes[0];
+    expect(box.tagName).toBe('rect');
+    expect(box.getAttribute('stroke-dasharray')).toBe('6 4');
+    expect(boxOf([box])).toEqual(truncBox(SYNTH_DOC.cards[0].spec.elements[3]));
+    expect(boxOf([box])).toEqual([250, 200, 400, 280]);
+
+    // 2) <title> 存在（spec D13「在图上标注」的唯一载体），但**不带** data-el-id。
+    //    这一条才真正钉住占位框的 `<title>` 不是契约元素——给它的 `<title>` 也打上
+    //    data-el-id 时，节点数会变成 2、`actualCardNodes` 也会 +1，两处同时红。
+    const titles = box.querySelectorAll('title');
+    expect(titles).toHaveLength(1);
+    expect(titles[0].getAttribute('data-el-id')).toBeNull();
+    expect(titles[0].textContent).toContain('未在 JS 渲染器实现');
+    // 全卡带 data-el-id 的节点数仍然只按「每个元素 1 个（text 除外）」算
+    expect(actualCardNodes(svg).synth_card).toBe(expectedCardNodes(SYNTH_DOC.cards[0]));
   });
 
   it('headline 是 1 个 <g> + 4 个 <text>：`min(行数, 4)` 这条口径真的在起作用', () => {
@@ -453,8 +503,12 @@ describe('合成 doc（不依赖金样本）', () => {
     const nodes = collectByElId(svg).get(cardKey('synth_card', 'headline'));
     expect(nodes).toHaveLength(3); // 1 个 <g> + 2 行有字
     expect(nodes.filter((node) => node.tagName === 'text')).toHaveLength(2);
-    // 公式侧同样只算落笔的行
-    expect(expectedCardNodes(doc.cards[0])).toBe(1 + 1 + 2 + 1);
+    // 公式侧同样只算落笔的行：headline = 1 个 <g> + 2 行，其余 3 个元素各 1。
+    // 期望值从夹具的**行内容**算出来（空行不落笔），不写「4」这个字面量。
+    const headlineEl = doc.cards[0].spec.elements[1];
+    const otherElements = doc.cards[0].spec.elements.length - 1;
+    const inked = headlineEl.lines.slice(0, MAX_LINES).filter((line) => line !== '').length;
+    expect(expectedCardNodes(doc.cards[0])).toBe(1 + inked + otherElements);
   });
 
   it('Review Focus #4：卡内元素的坐标是相对卡片的（x_in=0 → x="0"，不是 40）', () => {
@@ -564,6 +618,10 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V1 结构对拍（11 份 demo 图纸�
         let checked = 0;
         let skipped = 0;
         const skipHist = {};
+        // 第二道闸门：逐分量绝对差的最大值。第一道闸门是下面的 `toEqual(expected)`；
+        // 把 `toEqual` 弱化（例如改成 `toBeDefined()`）时，这条摘要断言仍然会红。
+        // 见文件末尾合成 doc 组 + 报告里的定向破坏 3a。
+        let maxAbsPxDiff = 0;
 
         for (const card of cards) {
           for (const el of card.spec.elements || []) {
@@ -586,6 +644,17 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V1 结构对拍（11 份 demo 图纸�
               .toEqual(expected);
             checked += 1;
 
+            // 累计逐分量绝对差（`actual` 取不到几何时按 `Infinity` 记，让摘要断言必红）。
+            if (Array.isArray(actual) && actual.length === expected.length) {
+              for (let i = 0; i < expected.length; i += 1) {
+                maxAbsPxDiff = Math.max(
+                  maxAbsPxDiff, Math.abs(Number(actual[i]) - Number(expected[i])),
+                );
+              }
+            } else {
+              maxAbsPxDiff = Infinity;
+            }
+
             // 英寸空间的读数只用于让报错好读（1e-2 = 1px），**不做闸门**。
             // 注意 vitest 的 `toBeCloseTo(v, 2)` 是 0.005 不是 0.01；差值恰好是 1px 时
             // 浮点上会落到 0.010000000000000009，所以给一个极小的机器 epsilon。
@@ -599,8 +668,22 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V1 结构对拍（11 份 demo 图纸�
           }
         }
 
-        // 显式计数断言：不许把不可回算的元素静默丢掉
-        expect(skipped).toBe(elements - checked);
+        // 第二道闸门（值）：所有可回算元素的逐分量绝对差最大值为 0（px 零容差）。
+        // 与上面的 `toEqual` 互为备份 —— 任何一方被弱化，另一方仍会红。
+        //
+        // `checked === 0` 只出现在 `_plain`（0 张卡片）：那份没有可比的元素，摘要断言
+        // 天然真空，所以那种情形改为要求 `elements === 0`（不是「一个都没比也算过」）。
+        if (checked > 0) {
+          expect(maxAbsPxDiff, `${sample.name}：px 空间逐分量最大绝对差必须是 0`).toBe(0);
+        } else {
+          expect(elements, `${sample.name}：没有可回算元素时必须一个元素都没有`).toBe(0);
+        }
+
+        // 显式计数断言：不许把不可回算的元素静默丢掉。
+        // 下面这条只是把「elements = checked + skipped」这个**定义**读一遍（两个计数器
+        // 出自同一条分支，等式结构上恒成立），它自己抓不到错；真正咬人的是紧随其后的
+        // 四条与实测基准对拍：elements / checked / skipped / skipHist 任一跑偏都会红。
+        expect(elements).toBe(checked + skipped);
         expect(elements).toBe(baseline.elements);
         expect(checked).toBe(baseline.checked);
         expect(skipped).toBe(baseline.skipped);

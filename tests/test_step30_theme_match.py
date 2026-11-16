@@ -20,7 +20,8 @@ from loop.asset_lookup import find_assets_by_theme, find_assets_by_semantic
 from loop.compose import (THEME_MIN_CHARS, _pick_illustration, build_flow,
                           compose_page, extract_theme, load_theme_terms)
 from loop.data_source import DB_PATH
-from loop.layout import ImageBlock, LayoutSpec, flow_layout, page_spec_path
+from loop.layout import (ImageBlock, LayoutOverflowError, LayoutSpec,
+                         flow_layout, page_spec_path)
 from tests.scratch import mkdtemp
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -243,11 +244,19 @@ class TestComposeThemeFlow(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(out, "preview.png")))
         with open(page_spec_path(out), encoding="utf-8") as fh:
             page = json.load(fh)
-        self.assertEqual(len(page["images"]), 2)
+        # 升到整行的温度计右侧再没有并排位置，整页因此装不下 —— 编排层按用户
+        # m05779 裁定 ② 丢掉被挤下来的那一张（只丢插图，卡片与文字一个不丢）。
+        self.assertEqual([img["name"] for img in page["images"]],
+                         ["illustration_26"])
         with open(os.path.join(out, "flow.json"), encoding="utf-8") as fh:
             flow = json.load(fh)
         self.assertIn("themes", flow)
         self.assertTrue(any(it["kind"] == "image" for it in flow["flow"]))
+        self.assertEqual([n["images"] for n in flow["notes"]
+                          if n["kind"] == "illustration_dropped"],
+                         [["illustration_17"]])
+        self.assertEqual([m["illustration"] for m in flow["matches"]
+                          if m["dataset_key"] == "heat_ratio_top5"], [None])
 
     def test_to_dict_carries_themes(self):
         data = self.result.to_dict()
@@ -257,12 +266,25 @@ class TestComposeThemeFlow(unittest.TestCase):
 
 
 class TestLayoutStructureUnchanged(unittest.TestCase):
-    """排版结构没动：只换了插图来源。"""
+    """排版结构没动：只换了插图来源。
+
+    整版要从**生产入口** ``compose_page`` 取：用户 m05779 之后，2 栏 15 in 的
+    版面装不下「升栏卡片 + 两张插图」（温度计升到整行后变高，整页 15.49 in >
+    15.00 in），编排层会丢掉被升栏挤下来的那一张插图并记一条 note。手动
+    ``flow_layout(build_flow(...).flow)`` 是**不带丢图策略**的低层路径，照旧
+    如实抛 ``LayoutOverflowError``（下面有一条用例守着这个分工）。
+    """
 
     def setUp(self):
         self.layout = LayoutSpec(column_count=2)
-        self.page = flow_layout(self.layout,
-                                build_flow(COPY, layout=self.layout).flow)
+        self.out = mkdtemp()
+        self.page = compose_page(COPY, self.out, column_count=2).page
+
+    def test_low_level_path_still_reports_the_overflow(self):
+        # 丢图是**编排层**的政策：手动排版没有这份政策，装不下就得报错 ——
+        # 绝不为了让页面装下而压扁卡片或缩小字号（用户 m05779）。
+        with self.assertRaises(LayoutOverflowError):
+            flow_layout(self.layout, build_flow(COPY, layout=self.layout).flow)
 
     def test_title_still_spans_the_full_width(self):
         title = [b for b in self.page.blocks if b.block.style == "title"][0]

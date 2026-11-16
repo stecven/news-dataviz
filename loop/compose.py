@@ -36,8 +36,9 @@ from loop.asset_lookup import (find_assets_by_semantic, find_assets_by_theme,
                                semantic_theme_terms)
 from loop.contract import dump_layout, write_layout_atomic
 from loop.data_source import DB_PATH, load_points
-from loop.layout import (CardSpec, ImageBlock, LayoutSpec, TextBlock,
-                         build_card, flow_layout, page_spec_path)
+from loop.layout import (CardSpec, ImageBlock, LayoutOverflowError, LayoutSpec,
+                         TextBlock, build_card, card_span_needed, flow_layout,
+                         page_spec_path)
 from loop.selector import (SEMANTIC_COMPARE, SEMANTIC_SHARE,
                            features_from_points, select)
 
@@ -525,6 +526,44 @@ def build_flow(text: str, *, layout: LayoutSpec | None = None,
     return ComposeResult(flow=flow, matches=matches, notes=notes, themes=themes)
 
 
+def _drop_spilled_illustrations(result, layout: LayoutSpec) -> list:
+    """丢掉「卡片被升到整行、右侧再没有并排位置」的那些插图（用户 m05779）。
+
+    编排时卡片声明的是 1 栏（好和插图并排），但严格等比之后一栏宽常常装不下
+    这张图 —— 排版层会把它**升到整行**。升到整行就没有右侧位置了：原本贴在
+    它旁边的插图只能顺延到下一行（第一次排版就是这么算的），整页因此装不下
+    时才按裁定 ② 丢掉这一处插图 —— **只丢插图，卡片与文字一个不丢**。
+
+    「会不会被升栏」问的是排版层**同一个**规则（``layout.card_span_needed``，
+    内部就是 ``flow_layout`` 用的那次升栏搜索），所以这里的判定与实际落位永远
+    一致。返回被丢掉的插图名列表（顺序照流里的顺序）。
+
+    探测本身出问题（例如这张卡片满宽也装不下）时**不动**这一项：把原始报错
+    原样留给调用方，绝不把别的错误盖成「装不下」。
+    """
+    spilled: list = []
+    card = None
+    for item in result.flow:
+        if isinstance(item, CardSpec):
+            card = item
+        elif isinstance(item, ImageBlock) and card is not None:
+            try:
+                needed = card_span_needed(card, layout)
+            except Exception:
+                continue
+            if needed > int(getattr(card, "column_span", 1) or 1):
+                spilled.append((card, item))
+    if not spilled:
+        return []
+    gone = {id(image) for _card, image in spilled}
+    result.flow[:] = [it for it in result.flow if id(it) not in gone]
+    for card, _image in spilled:
+        for match in result.matches:
+            if match.card_name == card.name:
+                match.illustration = None
+    return [image.name for _card, image in spilled]
+
+
 def compose_page(text: str, out_dir: str, *, width_in: float = 10.0,
                  height_in: float = 15.0, margin_in: float = 0.4,
                  gutter_in: float = 0.3, db_path: str = DB_PATH,
@@ -543,7 +582,26 @@ def compose_page(text: str, out_dir: str, *, width_in: float = 10.0,
     result = build_flow(text, layout=layout, db_path=db_path,
                         on_unapplicable=on_unapplicable)
     os.makedirs(out_dir, exist_ok=True)
-    page = flow_layout(layout, result.flow)
+    try:
+        page = flow_layout(layout, result.flow)
+    except LayoutOverflowError as exc:
+        # 升到整行的卡片右侧再没有并排位置 —— 插图先顺延到下一行（第一次排版
+        # 就是照这个算的）；整页因此装不下时按用户 m05779 裁定 ② 丢掉这些插图
+        # 再排一次，并记一条 note。只丢插图：卡片与文字一个不丢。
+        dropped = _drop_spilled_illustrations(result, layout)
+        if not dropped:
+            raise                       # 没有可丢的插图 → 原样抛（裁定 ③）
+        result.notes.append({
+            "kind": "illustration_dropped",
+            "images": dropped,
+            "reason": "卡片升到整行后整页装不下，按用户 m05779 第③条顺延/留白",
+        })
+        try:
+            page = flow_layout(layout, result.flow)
+        except LayoutOverflowError:
+            # 丢掉插图还是装不下 → 把**原来**那个异常原样抛出去（裁定 ③）：
+            # 这一页的问题不是插图，报错不该被换成别的说法。
+            raise exc from None
     result.page = page
     write_layout_atomic(page_spec_path(out_dir), dump_layout(page))
     rendered = render_layout(page, out_dir)

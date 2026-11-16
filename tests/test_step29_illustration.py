@@ -4,7 +4,8 @@
 
 * 自动编排生成的流中含 ``ImageBlock``            → ``TestComposePicksIllustration``
 * 图片按比例缩放不变形、不与文字/卡片重叠          → ``TestImageGeometry`` / ``TestPlacement``
-* 仍合多栏规则（占 1 栏就严格等于栏宽）            → ``TestPlacement``
+* 仍合多栏规则（占 1 栏 = 落在该栏带内，卡片等比居中 → ``TestPlacement``；
+  插图仍按它拿到的整栏宽绘制）
 * 素材库查不到不阻塞排版                          → ``TestMissingAssetDoesNotBlock``
 * 不改单卡模块、向后兼容                          → ``TestBackwardCompatible``
 """
@@ -19,7 +20,7 @@ from loop.asset_lookup import find_assets_by_semantic
 from loop.compose import build_flow
 from loop.data_source import DB_PATH
 from loop.layout import (CardSpec, ImageBlock, LayoutOverflowError, LayoutSpec,
-                         PlacedImage, TextBlock, fit_rect_in, flatten,
+                         PlacedImage, TextBlock, card_box, fit_rect_in, flatten,
                          flow_layout, image_box, image_size_in, page_spec_path)
 from loop.render_page import render_layout
 from loop.verify import read_shapes
@@ -162,13 +163,25 @@ class TestPlacement(unittest.TestCase):
         card, image = page.cards[0], page.images[0]
         self.assertAlmostEqual(card.y_in, image.y_in)
         self.assertEqual(card.row, image.row)
-        # 左边一栏放卡片、右边一栏放插图，间隙正好是栏间距。
-        self.assertAlmostEqual(card.x_in, self.layout.margin_in)
+        # 左边一栏放卡片、右边一栏放插图：插图贴着自己那一栏（slot 1），
+        # 两栏之间正好一个栏间距 —— 间隙要按**格子**说。
+        self.assertAlmostEqual(image.x_in, self.layout.slot_x_in(1), places=6)
         self.assertAlmostEqual(image.x_in,
-                               card.x_in + card.w_in
-                               + self.layout.column_gutter_in)
+                               self.layout.slot_x_in(0)
+                               + self.layout.column_width_in
+                               + self.layout.column_gutter_in, places=6)
+        # 卡片外框等比适配后在 4.5 in 的栏带里居中（不再贴左栏边）。
+        self.assertAlmostEqual(card.x_in,
+                               self.layout.slot_x_in(0)
+                               + (self.layout.column_width_in - card.w_in) / 2,
+                               places=6)
 
-    def test_row_height_is_the_taller_of_the_two(self):
+    def test_row_height_is_the_tallest_allocated_box(self):
+        """行高按**分配的格子**推进，不是按画出来的外框。
+
+        卡片的格子是「栏宽 4.5 × 自然比例」= 4.5×3.681818，比它画出来的外框
+        （3.64 in）高；插图的盒子 4.5×2.84 更矮。行高取较高的那个盒子。
+        """
         page = flow_layout(self.layout, [
             CardSpec("heat_age", "semicircle", chart_key="heat_age",
                      column_span=1),
@@ -176,22 +189,27 @@ class TestPlacement(unittest.TestCase):
         ])
         card, image = page.cards[0], page.images[0]
         self.assertGreater(card.h_in, image.h_in)
+        _, card_box_h = card_box(card.card, self.layout, span=1)
+        _, image_box_h, _ = image_box(image.block, self.layout, image.w_in)
         self.assertAlmostEqual(page.rows[0]["h_in"],
-                               max(card.h_in, image.h_in))
+                               max(card_box_h, image_box_h), places=6)
+        # 行高是盒子高：比画出来的卡框还高（多出来的那点就是居中的留白）。
+        self.assertGreater(page.rows[0]["h_in"], card.h_in)
 
-    def test_short_image_is_centred_inside_a_taller_row(self):
+    def test_short_image_is_top_aligned_inside_a_taller_row(self):
+        """插图不再被垂直居中：它与行顶、与卡片都**顶端对齐**。"""
         page = flow_layout(self.layout, [
             CardSpec("heat_age", "semicircle", chart_key="heat_age",
                      column_span=1),
             _copy_asset(PEOPLE, "占比构成"),
         ])
-        image = page.images[0]
-        expected = (page.rows[0]["h_in"] - image.h_in) / 2
-        self.assertAlmostEqual(image.rect[1], expected, places=6)
-        # 盒子仍是分配的整高，绘制矩形才居中 —— 盒子高度决定行高。
-        self.assertAlmostEqual(image.rect[1] + image.rect[3]
-                               + (page.rows[0]["h_in"] - image.h_in
-                                  - image.rect[1]), page.rows[0]["h_in"])
+        card, image = page.cards[0], page.images[0]
+        self.assertAlmostEqual(image.y_in, page.rows[0]["y_in"], places=6)
+        self.assertAlmostEqual(image.y_in, card.y_in, places=6)
+        # 绘制矩形也不再往下挪：盒子顶端就是绘制顶端。
+        self.assertAlmostEqual(image.rect[1], 0.0, places=6)
+        self.assertLess(image.y_in + image.h_in,
+                        page.rows[0]["y_in"] + page.rows[0]["h_in"])
 
     def test_nothing_overlaps_anything(self):
         page = flow_layout(self.layout, [
@@ -460,7 +478,12 @@ class TestMissingAssetDoesNotBlock(unittest.TestCase):
 class TestBackwardCompatible(unittest.TestCase):
     """不配插图的流与 0.1/0.2 行为一致；旧演示仍装得下。"""
 
-    def test_a_flow_without_images_is_unchanged(self):
+    def test_a_flow_without_images_keeps_its_structure(self):
+        """不配插图时行结构不变：标题独占整行，导语与卡片分享下一行。
+
+        卡片那一项的口径变了（契约升级）：格子仍是右边那一栏（5.1→9.6），
+        外框等比居中后画在 5.7675 —— 所以这里断言的是**格子**位置 + 居中留白。
+        """
         layout = LayoutSpec(width_in=10.0, height_in=15.0, margin_in=0.4,
                             gutter_in=0.3, column_count=2,
                             column_gutter_in=0.2)
@@ -477,7 +500,15 @@ class TestBackwardCompatible(unittest.TestCase):
         self.assertAlmostEqual(page.blocks[0].x_in, 0.4)
         self.assertAlmostEqual(page.blocks[0].y_in, 0.4)
         self.assertAlmostEqual(page.blocks[1].x_in, 0.4)
-        self.assertAlmostEqual(page.cards[0].x_in, 5.1)
+        card = page.cards[0]
+        self.assertEqual(card.row, page.blocks[1].row)
+        self.assertAlmostEqual(card.y_in, page.blocks[1].y_in)
+        # 卡片的格子是右边那一栏，外框等比居中画在里面。
+        self.assertLessEqual(card.w_in, layout.column_width_in + 1e-9)
+        self.assertAlmostEqual(card.x_in,
+                               layout.slot_x_in(1)
+                               + (layout.column_width_in - card.w_in) / 2,
+                               places=6)
 
     def test_expected_flow_size_for_the_reference_copy(self):
         """图文并茂 1.0 之后：标题 + 导语 + 2 段正文 + 2 卡 + 2 插图 = 8 项。"""

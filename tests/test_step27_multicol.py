@@ -6,6 +6,12 @@
 3. 同行的卡片和文字不会交叠，总高超出画布抛 ``LayoutOverflowError``。
 4. 兜底默认配图生效（测试验证）。
 5. 全量测试仍全绿（566+），不破坏原有单栏逻辑（向后兼容）。
+
+**契约升级（用户裁定，本次修复）**：卡片不再被拉伸去填满格子/栏带，而是
+``build_pagespec`` 严格等比适配进格子，装不下就自动升栏（``span`` 升到整行）。
+因此 ``PlacedCard.w_in/h_in`` 记的是**等比缩放后的真实外框**（可能比栏宽小，
+例如半圆卡在 4.5 in 栏里只有 3.165 in 宽），``x_in`` 是外框在栏带里**居中**后的
+位置；「占 1 栏 == 栏宽」「同行等高」这些旧断言已按新契约改写（见各测试 docstring）。
 """
 import json
 import os
@@ -184,14 +190,24 @@ class TestMulticolPlacement(unittest.TestCase):
         self.assertAlmostEqual(tail.x_in - (lead.x_in + lead.w_in),
                                COL_GUTTER, places=6)
 
-    def test_side_by_side_cards_fill_both_columns(self):
+    def test_side_by_side_cards_sit_in_their_own_column_bands(self):
+        """并排两张卡各占一栏：栏带由**格子**界定，卡框在栏带里等比居中。"""
         layout, page = self._page()
         semi, ph = page.card("semi"), page.card("ph")
         self.assertAlmostEqual(semi.y_in, ph.y_in, places=6)
-        self.assertAlmostEqual(semi.x_in, layout.slot_x_in(0), places=6)
+        self.assertEqual(semi.row, ph.row)
+        # 左卡：外框 ≤ 栏宽，而且在栏带里左右留白相等（不再贴左栏边）。
+        self.assertLessEqual(semi.w_in, layout.column_width_in + 1e-9)
+        self.assertAlmostEqual(semi.x_in,
+                               layout.slot_x_in(0)
+                               + (layout.column_width_in - semi.w_in) / 2,
+                               places=6)
+        # 右卡：格子正好是栏宽，外框贴齐栏带两边。
         self.assertAlmostEqual(ph.x_in, layout.slot_x_in(1), places=6)
+        self.assertAlmostEqual(ph.w_in, layout.column_width_in, places=6)
         self.assertAlmostEqual(ph.x_in + ph.w_in, W - MARGIN, places=6)
-        self.assertAlmostEqual(semi.h_in, ph.h_in, places=6)
+        # 同行不再等高：各项保持自己等比适配后的高度。
+        self.assertNotAlmostEqual(semi.h_in, ph.h_in, places=6)
 
     def test_vertical_pitch_is_the_flow_gutter(self):
         _, page = self._page()
@@ -223,24 +239,71 @@ class TestMulticolPlacement(unittest.TestCase):
                 self.assertFalse(_overlap(a, b), f"{a.name} 与 {b.name} 交叠")
 
     def test_cross_column_card_uses_the_whole_row(self):
+        """声明的 ``column_span=2`` 让卡片的**格子**就是整行（9.2 in）。
+
+        契约升级后画出来的外框等比缩小并居中，所以宽度不再恰好等于 9.2；
+        「用了整行」这句话现在由「格子覆盖整行 + 外框在整行里居中」来证明。
+        """
         layout = _layout()
         flow = [CardSpec("thermo", "thermometer", chart_key="heat_ratio_top5",
                          title="增速", column_span=2)]
         page = flow_layout(layout, flow)
         card = page.card("thermo")
-        self.assertAlmostEqual(card.w_in, layout.span_width_in(2), places=6)
+        self.assertLessEqual(card.w_in, layout.span_width_in(2) + 1e-9)
+        self.assertAlmostEqual(card.w_in, 8.2384, places=4)
+        self.assertAlmostEqual(card.x_in,
+                               layout.slot_x_in(0)
+                               + (layout.span_width_in(2) - card.w_in) / 2,
+                               places=6)
+        self.assertAlmostEqual(card.x_in + card.w_in / 2,
+                               MARGIN + layout.span_width_in(2) / 2, places=6)
         self.assertLessEqual(card.h_in, layout.max_card_height_in + 1e-9)
+        # 整行只有它一项：它确实独占了一行。
+        self.assertEqual(len(page.rows), 1)
+        self.assertEqual(page.rows[0]["cards"], ["thermo"])
 
-    def test_narrow_column_card_grows_taller_instead_of_failing(self):
-        """单栏宽度被钉死时，高度可以顶到上限，图形不至于因为「扁」而被拒。"""
+    def test_narrow_column_card_is_fitted_instead_of_being_stretched(self):
+        """单栏装得下时：卡片等比缩小居中，不再被单轴拉高。
+
+        旧版会把卡片顶到 ``max_card_height_in``（4.97 in），把它压成「更方」的
+        形状；现在外框 3.165×3.64 保持自然比例、居中放在 4.5 in 的栏带里。
+        """
         layout = _layout()
         page = flow_layout(layout, [CardSpec("semi", "semicircle",
                                              chart_key="heat_age",
                                              title="占比", column_span=1)])
         semi = page.card("semi")
-        self.assertAlmostEqual(semi.w_in, layout.column_width_in, places=6)
-        self.assertAlmostEqual(semi.h_in, layout.max_card_height_in, places=6)
-        self.assertLess(semi.w_in / semi.h_in, 7.15 / 5.85)  # 比自然比例更方
+        self.assertLess(semi.w_in, layout.column_width_in)
+        self.assertAlmostEqual(semi.w_in, 3.165, places=6)
+        self.assertAlmostEqual(semi.h_in, 3.64, places=6)
+        self.assertLess(semi.h_in, layout.max_card_height_in - 1e-6)
+        self.assertAlmostEqual(semi.x_in,
+                               layout.slot_x_in(0)
+                               + (layout.column_width_in - semi.w_in) / 2,
+                               places=6)
+
+    def test_narrow_column_card_that_does_not_fit_is_promoted_to_the_whole_row(
+            self):
+        """单栏**装不下**可读的最小尺寸时，自动升栏到整行。
+
+        温度计在 4.5 in 的一栏里连最小可读尺寸都放不下（``FitRequirement``），
+        于是版式把它从声明的 1 栏升到 2 栏：格子覆盖整行（0.4→9.6），外框
+        8.2384 in 只比整行少一圈居中留白。声明的 ``column_span`` 不变。
+        """
+        layout = _layout()
+        page = flow_layout(layout, [CardSpec("thermo", "thermometer",
+                                             chart_key="heat_ratio_top5",
+                                             title="增速", column_span=1)])
+        card = page.card("thermo")
+        self.assertEqual(card.card.column_span, 1)      # 声明仍是 1 栏
+        self.assertGreater(card.w_in, layout.column_width_in)
+        self.assertAlmostEqual(card.w_in, 8.2384, places=4)
+        # 真的跨了 2 栏：格子覆盖整行（左栏 + 栏间距 + 右栏）。
+        box_left = card.x_in - (layout.span_width_in(2) - card.w_in) / 2
+        self.assertAlmostEqual(box_left, layout.slot_x_in(0), places=6)
+        self.assertAlmostEqual(box_left + layout.span_width_in(2),
+                               W - MARGIN, places=6)
+        self.assertLessEqual(card.h_in, layout.max_card_height_in + 1e-9)
 
 
 class TestOverflow(unittest.TestCase):
@@ -328,6 +391,12 @@ class TestFallbackPolicy(unittest.TestCase):
 
 class TestBackwardCompatible(unittest.TestCase):
     def test_single_column_flow_is_unchanged(self):
+        """单栏向后兼容：文本块仍占满可用宽度、仍按 gutter 往下排。
+
+        卡片那一项的口径变了（契约升级）：格子仍是声明的 9.2×4.6，但
+        ``w_in/h_in`` 记的是等比适配后画出来的真实外框 7.3456×4.572711，
+        它在格子里水平居中 —— 所以 ``x_in`` 不再是 MRAGIN 而是 1.3272。
+        """
         layout = LayoutSpec(width_in=W, height_in=H, margin_in=MARGIN,
                             gutter_in=GUTTER)
         flow = [TextBlock("标题", "title", "center"),
@@ -340,7 +409,13 @@ class TestBackwardCompatible(unittest.TestCase):
         self.assertAlmostEqual(title.w_in, 9.2, places=6)
         self.assertAlmostEqual(page.blocks[1].y_in,
                                MARGIN + title.h_in + GUTTER, places=6)
-        self.assertAlmostEqual(page.card("thermo").w_in, 9.2, places=6)
+        thermo = page.card("thermo")
+        self.assertAlmostEqual(thermo.w_in, 7.3456, places=4)
+        self.assertAlmostEqual(thermo.h_in, 4.572711, places=6)
+        self.assertLessEqual(thermo.w_in, 9.2 + 1e-9)
+        self.assertLessEqual(thermo.h_in, 4.6 + 1e-9)
+        self.assertAlmostEqual(thermo.x_in,
+                               MARGIN + (9.2 - thermo.w_in) / 2, places=6)
         self.assertEqual(page.column_count, 1)
 
     def test_default_layout_is_one_column(self):
@@ -425,9 +500,16 @@ class TestRenderedColumns(unittest.TestCase):
         self.assertEqual(self._dark(block.x_in + inner, y0,
                                     block.x_in + inner + COL_GUTTER, y1), 0)
 
-    def test_card_frames_sit_exactly_on_the_column_edges(self):
-        """卡框的竖边正好落在左右边距与两条栏边界上。"""
+    def test_card_frames_are_centred_in_their_column_bands(self):
+        """卡框画在自己**栏带**的中间：栏带算术不变，外框不再贴栏边。
+
+        契约升级后左卡（semi）等比适配成 3.165 in 宽，居中放在 4.5 in 的栏带
+        里；右卡（ph）的格子就是栏宽，外框仍贴齐栏带两边。两条栏带之间的
+        0.2 in 栏间距必须真的是空白。
+        """
         semi = self.page.card("semi")
+        ph = self.page.card("ph")
+        band = self.layout.column_width_in
         y0 = int(semi.y_in * PX) + 4
         y1 = int((semi.y_in + semi.h_in) * PX) - 4
         height = y1 - y0
@@ -438,15 +520,23 @@ class TestRenderedColumns(unittest.TestCase):
         def line_near(x, tol=2):
             return max(vertical(x + d) for d in range(-tol, tol + 1))
 
-        self.assertGreater(line_near(int(round(MARGIN * PX))), height * 0.9)
-        self.assertGreater(line_near(int(round((W - MARGIN) * PX))), height * 0.9)
-        right_edge = int(round((MARGIN + self.layout.column_width_in) * PX))
-        left_edge = int(round((MARGIN + self.layout.column_width_in
-                               + COL_GUTTER) * PX))
-        self.assertGreater(line_near(right_edge), height * 0.9, "左卡右缘")
-        self.assertGreater(line_near(left_edge), height * 0.9, "右卡左缘")
+        # 画出来的框就落在记录的 x_in / x_in+w_in 上：两张卡的四条竖边。
+        for label, edge in (("左卡左缘", semi.x_in),
+                            ("左卡右缘", semi.x_in + semi.w_in),
+                            ("右卡左缘", ph.x_in),
+                            ("右卡右缘", ph.x_in + ph.w_in)):
+            self.assertGreater(line_near(int(round(edge * PX))), height * 0.9,
+                               label)
+        # 居中留白：左卡在栏带里左右留白相等。
+        self.assertAlmostEqual(semi.x_in - MARGIN,
+                               (MARGIN + band) - (semi.x_in + semi.w_in),
+                               places=6)
+        # 右卡：格子 = 栏宽，外框贴齐栏带。
+        self.assertAlmostEqual(ph.x_in, self.layout.slot_x_in(1), places=6)
+        self.assertAlmostEqual(ph.x_in + ph.w_in, W - MARGIN, places=6)
         # 栏间距 0.2 in 必须真的是空白。
-        self.assertEqual(vertical((right_edge + left_edge) // 2), 0)
+        self.assertEqual(
+            vertical(int(round((MARGIN + band + COL_GUTTER / 2) * PX))), 0)
 
     def test_rendered_pagespec_records_the_column_metadata(self):
         with open(page_spec_path(self.out), encoding="utf-8") as fh:

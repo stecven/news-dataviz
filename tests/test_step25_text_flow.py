@@ -113,6 +113,12 @@ class TestMixedFlowPlacement(unittest.TestCase):
                                    + page.gutter_in, nxt["y_in"], places=6)
 
     def test_horizontal_neighbours_are_a_gutter_apart(self):
+        """间隙按**格子**量：卡框在格子里居中留白，外框之间看起来会更宽。
+
+        契约升级（等比居中留白）后 ``x_in/w_in`` 记的是画出来的真实外框，
+        所以「相邻两项之间正好一个 gutter」这句话现在说的是它们**分配的格子**：
+        格子的边界 = 外框边界再加回居中的那圈留白。
+        """
         page = _flow()
         by_row = {}
         for c in page.cards:
@@ -121,8 +127,15 @@ class TestMixedFlowPlacement(unittest.TestCase):
         for cards in by_row.values():
             cards.sort(key=lambda c: c.x_in)
             for left, right in zip(cards, cards[1:]):
-                self.assertAlmostEqual(left.x_in + left.w_in + page.gutter_in,
-                                       right.x_in, places=6)
+                left_box_right = (left.x_in + left.w_in
+                                  + (left.card.width_in - left.w_in) / 2)
+                right_box_left = (right.x_in
+                                  - (right.card.width_in - right.w_in) / 2)
+                self.assertAlmostEqual(left_box_right + page.gutter_in,
+                                       right_box_left, places=6)
+                # 可见间隙 ≥ gutter（留白只会让它更宽），所以永远不会重叠。
+                self.assertGreaterEqual(right.x_in - (left.x_in + left.w_in),
+                                        page.gutter_in - 1e-9)
                 pairs += 1
         self.assertGreaterEqual(pairs, 1, "演示里应有一行并排两张卡片")
 

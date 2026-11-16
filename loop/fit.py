@@ -97,6 +97,33 @@ class BoundaryError(Exception):
         super().__init__("：".join(bits))
 
 
+class FitRequirement(Exception):
+    """格子太窄了，但**换更宽的格子就能装下**（用户 m05569）。
+
+    与 :class:`BoundaryError` 的分工：``BoundaryError`` 是「这个格子物理上
+    装不下这张图」（内容太多、chrome 吃满）；``FitRequirement`` 是「在保持
+    原始宽高比、字号也读得清的前提下，这个格子**宽度不够**，给我更宽的地方
+    就行」。
+
+    ``loop/layout.py`` 捕获它之后会把这卡片**升栏**（1 栏 → 占满整行）再装
+    一次；升到满宽仍然装不下，才转成面向用户的 ``LayoutFitError``。
+
+    为什么要单独一个异常：等比之后「装不下」其实是两种病——一种能靠换型
+    （升栏）治好，一种不能。混在一起就只能一律报错，用户看到的是「图太复杂」
+    而不是「格子太窄」。
+    """
+
+    def __init__(self, target, need_width_in: float, need_height_in: float,
+                 template=None):
+        self.target = (float(target[0]), float(target[1]))
+        self.need_width_in = float(need_width_in)
+        self.need_height_in = float(need_height_in)
+        self.template = template
+        super().__init__(
+            f"卡片 {self.target[0]:g}×{self.target[1]:g} in 太窄：保持原始宽高比"
+            f"并让字读得清，大约需要 {self.need_width_in:.2f}×{self.need_height_in:.2f} in 的格子")
+
+
 # ---------------------------------------------------------------------------
 # 盒子代数
 # ---------------------------------------------------------------------------
@@ -115,6 +142,45 @@ def available_box(target_w: float, target_h: float) -> tuple[float, float]:
     """目标格子能留给内容（数据图形）的宽高。"""
     return (float(target_w) - 2 * PAD_IN,
             float(target_h) - chrome_height_in())
+
+
+def design_canvas_in(natural: PageSpec | None) -> tuple[float, float] | None:
+    """设计尺度下的**求解画布**尺寸（自然解自己的 ``width_in/height_in``）。
+
+    严格等比（用户 m05569）要以它为基准：目标格子里的画布取
+    ``design × s``，几何参数也乘同一个 ``s``。求解器对画布与参数是齐次的
+    （画布和参数同时乘 s，解出来的坐标也乘 s），所以图形保持设计宽高比。
+
+    **不要**拿 ``available_box`` 去算它：自然解不包框时画布就是
+    ``width_in × height_in``（例如 10.0×6.0），而 chrome 是包框时才加的。
+    """
+    if natural is None:
+        return None
+    w, h = float(natural.width_in), float(natural.height_in)
+    if w <= 1e-9 or h <= 1e-9:
+        return None
+    return (w, h)
+
+
+def design_content_in(natural: PageSpec | None, *,
+                      note_text: str | None = None,
+                      subtitle_text: str | None = None) -> tuple[float, float] | None:
+    """设计尺度下**画出来的内容**外接框尺寸（包框后减掉 chrome）。
+
+    这才是「要塞进目标格子内容盒」的那个东西：``design_content × s`` 必须装得
+    下。拿画布尺寸去估会高估——图形通常不占满画布（thermometer 的内容盒是
+    9.92×4.10，画布却是 10.0×6.0），照着画布缩会把卡片排得比实际需要的小一圈，
+    字号白白掉到下限以下而被误判成「装不下」。
+    """
+    if natural is None:
+        return None
+    wrapped = frame_mod.wrap(natural, note_text=note_text,
+                             subtitle_text=subtitle_text)
+    w = float(wrapped.width_in) - 2 * PAD_IN
+    h = float(wrapped.height_in) - chrome_height_in()
+    if w <= 1e-9 or h <= 1e-9:
+        return None
+    return (w, h)
 
 
 # ---------------------------------------------------------------------------
@@ -313,11 +379,29 @@ def fit_to_target(solve_at, *, template, target_width_in, target_height_in,
                   note_text: str | None = None,
                   subtitle_text: str | None = None,
                   probe: bool = False) -> PageSpec:
-    """把一张卡片装进 ``target_width_in × target_height_in`` 的格子。
+    """把一张卡片**严格等比**地装进 ``target_width_in × target_height_in``。
 
     ``solve_at(param_overrides, width_in, height_in) -> PageSpec`` 由调用方
     提供（它是唯一知道怎么建骨架、怎么求解的人），本函数只负责「缩到多大、
     装不装得下、装不下怎么报错」。
+
+    等比口径（用户 m05569）
+    ----------------------
+    设计尺度上有一个自然解 ``natural``：它的 ``width_in × height_in`` 是设计
+    画布，包框后减掉 chrome 得到设计内容 ``content = design_content_in(natural)``。
+    目标格子能给出的内容盒是 ``available_box(tw, th)``，于是缩放比 ``s`` 必须
+    满足 ``content × s ≤ 内容盒``，即
+
+        s ≤ s_cap = min(1, 盒宽/content宽, 盒高/content高)
+
+    取定 ``s`` 之后画布取 ``design × s``、几何参数乘同一个 ``s``、字号按包框后
+    的外框算。图形因此永远保持设计的宽高比。
+
+    字号尺度按**包框后的外框**算（``canvas_scale`` 本来就是这个口径）：chrome
+    （内边距/标题带/说明行）是固定英寸数、不随 s 缩，所以字号比几何缩得慢一点，
+    这是有意的——字小于 6 pt 就没法读，宁可让卡片小一点也不能压扁。
+
+    格子太窄时抛 :class:`FitRequirement`（让上层升栏），**绝不静默压扁**。
 
     ``probe=True`` 时不在失败路径上估算最小可行尺寸——那一步要反复试不同的
     格子，否则会和 :func:`minimum_target` 互相调用成环。
@@ -327,68 +411,126 @@ def fit_to_target(solve_at, *, template, target_width_in, target_height_in,
         raise BoundaryError((tw, th), ["目标尺寸必须为正"],
                             template=template.name)
     avail_w, avail_h = available_box(tw, th)
-    font_scale = palette.canvas_scale(tw, th)
-    floors = text_floors(template, font_scale)
+    if avail_w <= 0.2 or avail_h <= 0.2:
+        raise BoundaryError((tw, th), ["chrome 就占满了格子"],
+                            None if probe else _min_size(solve_at, template, tw, th),
+                            template=template.name)
+
+    design = design_canvas_in(natural)
+    content = design_content_in(natural, note_text=note_text,
+                                subtitle_text=subtitle_text)
+    if design is None or content is None:
+        # 没有自然解：退回旧口径（可用盒即画布），保持向后兼容。
+        def canvas_for(s: float) -> tuple[float, float]:
+            return (avail_w, avail_h)
+
+        def font_scale_for(s: float) -> float:
+            return palette.canvas_scale(tw, th)
+    else:
+        def canvas_for(s: float) -> tuple[float, float]:
+            return (round(design[0] * s, 6), round(design[1] * s, 6))
+
+        def font_scale_for(s: float) -> float:
+            # 字号尺度跟着**包框后的外框**走（渲染层 canvas_scale 也是这个口径），
+            # chrome 固定不缩，所以字号比几何缩得慢一点——这是有意的。
+            return palette.canvas_scale(content[0] * s + 2 * PAD_IN,
+                                        content[1] * s + chrome_height_in())
 
     def solve_only(s: float, floors: dict = None) -> PageSpec | None:
-        """只问求解器：几何装得下吗（不看文字）。"""
-        overrides = scaled_overrides(template, s, floors=floors or _floors)
+        """只问求解器：这个比例解不解得出来。"""
+        fs = font_scale_for(s)
+        overrides = scaled_overrides(
+            template, s,
+            floors=text_floors(template, fs) if floors is None else floors)
         try:
-            return solve_at(overrides, avail_w, avail_h)
+            return solve_at(overrides, *canvas_for(s))
         except SolveError:
             return None
 
+    def solvable(s: float, floors: dict = None) -> PageSpec | None:
+        """解得出、文字也放得下——**先不管格子够不够大**。
+
+        这里刻意不设格子上界：「格子不够大」（能靠升栏解决）和「这张图本身
+        没法缩这么小」（无解）是两个病，得分得开才能对症（用户 m05569）。
+        """
+        spec = solve_only(s, floors)
+        if spec is None:
+            return None
+        if text_problems(spec, font_scale_for(s), skip=CHROME_ROLES):
+            return None
+        return spec
+
     def attempt(s: float, floors: dict = None) -> PageSpec | None:
-        """按 s 缩放参数重解，并顺手体检一次文本。
+        """``solvable`` 之外，再要求**画出来的东西确实装得进这个格子**。
 
         解不出来（C1 越界 / H_track ≤ 0）就是装不下；解出来但标签互相压，
         也算装不下——求解器只保证元素在画布内，不保证相邻标签不重叠
         （``d`` 的公式里没有 ``w_label``）。文本体检要跳过会被 chrome 替换掉
         的 role，否则量的是那个马上要被丢掉的小盒子。
+
+        尺寸这一关用**实际画出来的外接框**判，不用「设计内容 × s」预估：字号
+        有 6 pt 下限、不会跟着几何一路缩，所以内容并不是严格成比例地变小，
+        按预估判会把「其实还装得下」的判成装不下。外框 = 内容 + chrome。
         """
-        spec = solve_only(s, floors)
+        spec = solvable(s, floors)
         if spec is None:
             return None
-        if text_problems(spec, font_scale, skip=CHROME_ROLES):
+        x0, y0, x1, y1 = frame_mod.content_bbox(spec.elements)
+        if (x1 - x0) + 2 * PAD_IN > tw + 1e-6:
+            return None
+        if (y1 - y0) + chrome_height_in() > th + 1e-6:
             return None
         return spec
 
-    if avail_w <= 0.2 or avail_h <= 0.2:
-        raise BoundaryError(
-            (tw, th), ["chrome 就占满了格子"],
-            None if probe else _min_size(solve_at, template, tw, th),
-            template=template.name)
-
-    # 行高下限要迭代到位：先按「一行高」，解出来再拿实测折行把下限抬高，
-    # 直到文字真的装得下。半圆的图例在窄格里会折成两行，一轮不够。
-    _floors = floors
-    best, s = None, None
-    for _ in range(_ROW_FLOOR_ROUNDS):
-        # 两路并进：一路要求文字也过关，一路只要求几何过关。文字这一路失败时
-        # 仍要拿几何这一路的解去量「文字到底需要多大」，否则下限永远抬不上去
-        # ——那就成了「因为字太大所以不量字」的死循环。
-        clean, clean_s = _largest_feasible(attempt)
-        geo, _geo_s = _largest_feasible(solve_only)
-        if clean is not None:
-            best, s = clean, clean_s
-        ref = clean if clean is not None else geo
-        if ref is None:
-            break
-        raised = required_row_floors(ref, template, font_scale, _floors)
-        if raised == _floors:
-            break
-        _floors = raised
+    # 找最大的可用 s。可行区间不是单侧区间：s 太小文字装不下（被字号下限
+    # 兜住）、s 太大行列互相压，所以是扫不是二分。
+    best, s = _largest_feasible(attempt)
+    if best is not None and content is not None:
+        # 折行实测会把行高下限抬高（半圆的图例在窄格里会折成两行），迭代到位。
+        fl = text_floors(template, font_scale_for(s))
+        for _ in range(_ROW_FLOOR_ROUNDS):
+            ref = solve_only(s, fl)
+            if ref is None:
+                break
+            raised = required_row_floors(ref, template, font_scale_for(s), fl)
+            if raised == fl:
+                break
+            fl = raised
+            cand = attempt(s, fl)
+            if cand is not None:
+                best = cand
     if best is None:
+        # 等比之后装不下：先看「换成更宽的格子」能不能救（→ 上层升栏），
+        # 救不了才是真的物理装不下。这条分支正是升栏机制的发令枪。
+        up, up_s = _smallest_feasible(solvable)
+        if up is not None and not probe:
+            up_frame = frame_mod.wrap(up, note_text=note_text,
+                                      subtitle_text=subtitle_text)
+            need_w = round(float(up_frame.width_in), 6)
+            need_h = round(float(up_frame.height_in), 6)
+            if need_w > tw + 1e-6 or need_h > th + 1e-6:
+                raise FitRequirement((tw, th), need_w, need_h,
+                                     template=template.name)
         raise BoundaryError(
             (tw, th), ["任何缩放比例都装不下（元素太多或格子太小）"],
             None if probe else _min_size(solve_at, template, tw, th),
             template=template.name)
 
     # 先包框再体检：标题与说明在包框时被换成固定高度的 chrome，拿未包框的
-    # 小盒子去量它们只会得到假警报。
+    # 小盒子去量它们只会得到假警报。这里**不传 canvas_in** —— 外框跟着内容
+    # 一起缩，卡片才是等比的那一张（用户 m05569）。
     fitted = frame_mod.wrap(best, note_text=note_text,
-                            subtitle_text=subtitle_text, canvas_in=(tw, th))
-    problems = text_problems(fitted, font_scale)
+                            subtitle_text=subtitle_text)
+    if fitted.width_in > tw + 0.02 or fitted.height_in > th + 0.02:
+        # 保底：内容外接框和设计内容不是严格成比例的（文字不跟着几何完美缩），
+        # 万一溢出就报出来，绝不悄悄把卡片排到格子外面去。
+        raise BoundaryError(
+            (tw, th),
+            [f"等比缩完仍然放不下：包框后要 "
+             f"{fitted.width_in:.2f}×{fitted.height_in:.2f} in"],
+            None if probe else _min_size(solve_at, template, tw, th),
+            template=template.name)
+    problems = text_problems(fitted, font_scale_for(s))
     if problems:
         raise BoundaryError(
             (tw, th), problems,
@@ -398,35 +540,59 @@ def fit_to_target(solve_at, *, template, target_width_in, target_height_in,
     layout = dict(fitted.layout or {})
     meta = dict(layout.get("frame") or {})
     meta["fit"] = {"scale": round(s, 6), "target": [tw, th],
-                   "font_scale": round(font_scale, 6)}
+                   "font_scale": round(font_scale_for(s), 6)}
     layout["frame"] = meta
     return replace(fitted, layout=layout)
 
 
-def _largest_feasible(attempt):
-    """最大的可用 s（先粗扫、再向上细修）。
+def _largest_feasible(attempt, ceiling: float = 1.0):
+    """最大的可用 s（先粗扫、再向上细修），上限 ``ceiling``。
 
     可行区间不是单侧区间：s 太小标签装不下一行字，s 太大行列互相压。所以
-    不能用二分找边界，只能扫——先按 ``COARSE_STEP`` 从 1.0 往下找第一个
-    能用的，再在它上面一格范围内用 ``FINE_STEP`` 往上修。
+    不能用二分找边界，只能扫——先按 ``COARSE_STEP`` 从 ``ceiling`` 往下找
+    第一个能用的，再在它上面一格范围内用 ``FINE_STEP`` 往上修。
+
+    ``ceiling`` 是严格等比给的上界（``s_cap``：再大内容就超出内容盒了）。
     """
-    steps = int(round((1.0 - S_FLOOR) / COARSE_STEP))
+    top = min(1.0, float(ceiling))
+    if top < S_FLOOR:
+        return None, None
+    steps = int(round((top - S_FLOOR) / COARSE_STEP))
     for i in range(steps + 1):
-        s = round(1.0 - i * COARSE_STEP, 6)
+        s = round(top - i * COARSE_STEP, 6)
         if s < S_FLOOR:
             break
         spec = attempt(s)
         if spec is None:
             continue
         best, best_s = spec, s
-        ceiling = min(1.0, round(s + COARSE_STEP, 6))
+        upper = min(top, round(s + COARSE_STEP, 6))
         t = round(s + FINE_STEP, 6)
-        while t < ceiling - 1e-9:
+        while t < upper - 1e-9:
             cand = attempt(t)
             if cand is not None:
                 best, best_s = cand, t
             t = round(t + FINE_STEP, 6)
         return best, best_s
+    return None, None
+
+
+def _smallest_feasible(attempt, ceiling: float = 1.0):
+    """最小的可用 s（从 ``S_FLOOR`` 往上粗扫）。
+
+    只在「当前格子怎么缩都装不下」时用：如果**放大**格子能让它装下，说明这
+    张图不是内容太多，而是格子太窄 —— 上层可以升栏救它（用户 m05569）。
+    返回的那个 s 用来反推「需要多大的格子」。
+    """
+    top = min(1.0, float(ceiling))
+    steps = int(round((top - S_FLOOR) / COARSE_STEP))
+    for i in range(steps + 1):
+        s = round(S_FLOOR + i * COARSE_STEP, 6)
+        if s > top + 1e-9:
+            break
+        spec = attempt(s)
+        if spec is not None:
+            return spec, s
     return None, None
 
 

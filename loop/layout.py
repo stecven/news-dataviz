@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from PIL import Image
 
 from loop import card_text, palette, text_flow
-from loop.fit import BoundaryError
+from loop.fit import BoundaryError, FitRequirement
 from loop.models import ElementSpec, PageSpec, Scale
 from loop.selector import SEMANTIC_OTHER
 
@@ -388,7 +388,9 @@ class LayoutSpec:
     fit_oversized: bool = True
     #: 同一行的卡片是否拉成等高（用户 m05995）。False 时保留各自高度，
     #: 行内较矮卡片下方会留白 —— 就是 0.1 暴露的问题。
-    equal_height: bool = True
+    #: 已废弃（用户 m04205 起强制顶端对齐、不再逐行等高）。保留字段只为兼容
+    #: 旧调用方，置 True 也不再生效；下一版连同这个字段一起删。
+    equal_height: bool = False
     #: 分几栏（多栏图文混排 0.1）。1 = 单栏（0.1~0.4 的行为），最多 3 栏。
     column_count: int = 1
     #: 栏与栏之间的水平间距（英寸）。与行距 ``gutter_in`` 是两件事。
@@ -800,12 +802,46 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
         span = _span_of(item) if layout_.column_count > 1 else None
         if span is None and item.width_in is not None:
             w, h = item.width_in, item.height_in
-            spec = build_card(
-                dataclasses.replace(item, width_in=w, height_in=h), layout_)
-        else:
-            w, h = card_box(item, layout_, span=span)
-            spec, h = _build_card_fitted(item, layout_, w, h)
-        return spec, w, h, None
+            try:
+                spec = build_card(
+                    dataclasses.replace(item, width_in=w, height_in=h), layout_)
+            except FitRequirement as exc:
+                raise LayoutFitError(
+                    item.name,
+                    f"给定的 {w:.2f}×{h:.2f} in 格子太窄：保持宽高比又让字读得清"
+                    f"就装不下这张图（{exc}）") from exc
+            return spec, w, h, None
+        spec, w, h, span = _promote_card(item, layout_, span)
+        return spec, w, h, span
+
+    def _promote_card(item, layout_, span):
+        """造卡片，一栏装不下就**升栏**（用户 m05569）。返回 (spec, w, h, span)。
+
+        严格等比之后「一栏宽装不下」是常见结局：温度计占满整行才排得开。fit
+        引擎用 ``FitRequirement`` 告诉我们「给我更宽的格子就装得下」，于是把
+        ``column_span`` 一栏一栏往上加，一直加到整版宽；加到满宽还装不下，才是
+        这张图物理上排不进这一页，转成面向用户的 ``LayoutFitError``。
+
+        单栏版面（``span is None``）没有"更宽的格子"可给，直接报错。
+        """
+        max_span = layout_.column_count if span is not None else 1
+        want = span if span is not None else 1
+        last = None
+        while want <= max_span:
+            w, h = card_box(item, layout_,
+                            span=(want if span is not None else None))
+            try:
+                spec, h = _build_card_fitted(item, layout_, w, h)
+                # 这里返回的是**分配给它的格子**（w, h）；`_flush` 落位时会换成
+                # 卡片画出来的真实外框（用户 m05779 裁定 (a)），格子尺寸只用于
+                # 版面计算（游标推进、越界判断、行高）。
+                return spec, w, h, (want if span is not None else None)
+            except FitRequirement as exc:
+                last = exc
+                want += 1
+        detail = (f"占满整行（{layout_.usable_width_in:.2f} in）也装不下这张图：{last}"
+                  if last is not None else "卡片装不下")
+        raise LayoutFitError(item.name, detail) from last
 
     def _build_card_fitted(item, layout_, w, h):
         """按 (w, h) 造卡片；装不下就把高度顶到上限再试一次，返回 (spec, h)。
@@ -820,7 +856,7 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
             spec = build_card(
                 dataclasses.replace(item, width_in=w, height_in=h), layout_)
             return spec, h
-        except (LayoutFitError, BoundaryError) as exc:
+        except (LayoutFitError, BoundaryError, FitRequirement) as exc:
             cap = round(layout_.max_card_height_in, 6)
             if h >= cap - 1e-9:
                 raise
@@ -828,27 +864,23 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
                 spec = build_card(
                     dataclasses.replace(item, width_in=w, height_in=cap),
                     layout_)
-            except (LayoutFitError, BoundaryError):
+            except (LayoutFitError, BoundaryError, FitRequirement):
                 raise exc
             return spec, cap
 
     def _flush(items: list, y: float) -> float:
-        """收掉一行：等高拉伸 → 落坐标 → 返回下一行的 y。"""
+        """收掉一行：顶端对齐落坐标 → 返回下一行的 y。
+
+        行高取行内最高的一项（``max_h``），但**谁也不被拉高**——等高拉伸会让
+        卡片拿到一个只改高度的非等比盒子，图形随之被单轴压扁（用户 m04205）。
+        矮的项停在行顶，底下自然留白。
+        """
         nonlocal row_index
         if not items:
             return y
         boxes = [_box_of(it, layout) for it in items]
         heights = [b[2] for b in boxes]
         max_h = max(heights)
-        if layout.equal_height:
-            for idx, it in enumerate(items):
-                spec, w, h, groups = boxes[idx]
-                if spec is None or h >= max_h - 1e-9:
-                    continue
-                spec = build_card(dataclasses.replace(it, width_in=w,
-                                                      height_in=max_h), layout)
-                boxes[idx] = (spec, w, max_h, groups)
-            max_h = max(b[2] for b in boxes)
         if y + max_h > layout.height_in - layout.margin_in + 1e-9:
             raise LayoutOverflowError(
                 "换行后高度也装不下："
@@ -862,6 +894,8 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
             spec, w, h, groups = boxes[idx]
             span = _span_of(item)
             if layout.column_count > 1:
+                if isinstance(item, CardSpec) and groups:
+                    span = groups
                 x = layout.slot_x_in(slot)
             else:
                 if w > layout.usable_width_in + 1e-9:
@@ -872,6 +906,14 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
                         placed=placed, remaining=[item],
                         page_h=layout.usable_height_in)
                 x = x_cursor
+            # 卡片记录**画出来的真实外框**（用户 m05779 裁定 (a)：P3 前端编辑器
+            # 要能所见即所得地点击/拖拽）。严格等比之后外框通常比给定的格子小
+            # 一圈，差值居中留白 —— 不居中会贴着左边，看起来像没排满。
+            draw_w, draw_h = round(w, 6), round(h, 6)
+            if isinstance(item, CardSpec) and spec is not None:
+                draw_w = round(float(spec.width_in), 6)
+                draw_h = round(float(spec.height_in), 6)
+                x = round(x + (w - draw_w) / 2.0, 6)
             if isinstance(item, TextBlock):
                 placed_blocks.append(PlacedBlock(
                     block=item, x_in=round(x, 6), y_in=round(y, 6),
@@ -882,10 +924,6 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
                                       if item.columns > 1 else 0.0)))
             elif isinstance(item, ImageBlock):
                 dx, dy, dw, dh = groups
-                if layout.equal_height and h < max_h - 1e-9:
-                    # 行里最高的那项（通常是卡片）决定了行高；插图不拉伸，
-                    # 但要在行带里垂直居中，否则看起来像掉在行顶。
-                    dy = round(dy + (max_h - h) / 2.0, 6)
                 placed_images.append(PlacedImage(
                     block=item, x_in=round(x, 6), y_in=round(y, 6),
                     w_in=round(w, 6), h_in=round(h, 6), row=row_index,
@@ -895,7 +933,7 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
                     card=item, spec=card_text.annotate_card_text(
                         spec, palette.spec_scale(spec)),
                     x_in=round(x, 6), y_in=round(y, 6),
-                    w_in=round(w, 6), h_in=round(h, 6), row=row_index))
+                    w_in=draw_w, h_in=draw_h, row=row_index))
             slot += span if layout.column_count > 1 else 0
             x_cursor = round(x_cursor + w + layout.gutter_in, 6)
         rows_out.append({"kind": ("text" if len(items) == 1

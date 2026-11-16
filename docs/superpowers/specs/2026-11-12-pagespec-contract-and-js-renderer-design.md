@@ -501,7 +501,7 @@ page.exportSVG();
 | 期 | 内容 | 依赖 |
 |---|---|---|
 | **P1** | 契约冻结：`spec.schema.json` + `version` + `theme` + 卡片 `lines`/`font_pt` + `loop/contract.py` 读回入口 + 夹具 + V4/V5/V6 | 无 |
-| **P2** | 只读渲染：7 个原语 + `ticks`/`outline` 照抄 + 整版骨架 + `demo/` 页 + V1/V2 | P1 |
+| **P2** | 只读渲染：7 个原语 + `ticks`/`outline` 照抄 + 整版骨架 + `demo/` 页 + V1/V2 · **✅ 已完成（2026-11-14）** | P1 |
 | **P3** | 编辑（D15 边界内）：选中 / 拖动 / 改字 / 属性面板 / 撤销 + 导出回图纸 + V3 | P2 |
 | **P4** | CLI + MCP server 外壳 | P2（P3 不是必须） |
 | **P5** | 素材导出脚本 `scripts/export_web_assets.py` + 插图渲染（D13） | P2，可与 P3 并行 |
@@ -509,6 +509,8 @@ page.exportSVG();
 | **P7** | *(v2)* draw.io 出口 | P3 |
 
 P1 → P2 → P3 是主干。P4 / P5 可以和 P3 并行。
+
+P2 落地时的五条已知偏差与两条操作须知见 `frontend/README.md`。
 
 ---
 

@@ -13,6 +13,7 @@ import json
 import os
 import sys
 
+from loop.contract import dump_layout, write_layout_atomic
 from loop.layout import (CardSpec, LayoutFitError, LayoutOverflowError,
                          LayoutSpec, flow_layout, page_spec_path)
 from loop.render_page import render_layout
@@ -85,8 +86,7 @@ def main() -> int:
                         gutter_in=0.3)
     page = flow_layout(layout, _cards(preset=True))
 
-    with open(page_spec_path(OUT), "w", encoding="utf-8") as fh:
-        json.dump(page.to_dict(), fh, ensure_ascii=False, indent=2)
+    write_layout_atomic(page_spec_path(OUT), dump_layout(page))
 
     res = render_layout(page, OUT)
 

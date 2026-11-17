@@ -1,0 +1,1489 @@
+{
+  "width_in": 10.0,
+  "height_in": 15.0,
+  "margin_in": 0.4,
+  "gutter_in": 0.3,
+  "column_count": 1,
+  "column_gutter_in": 0.2,
+  "rows": [
+    {
+      "kind": "text",
+      "y_in": 0.4,
+      "h_in": 0.475,
+      "items": [
+        "取暖电器换季热销：五类小"
+      ],
+      "cards": [],
+      "blocks": [
+        "取暖电器换季热销：五类小"
+      ]
+    },
+    {
+      "kind": "text",
+      "y_in": 1.175,
+      "h_in": 0.30625,
+      "items": [
+        "入冬以来取暖电器进入销售"
+      ],
+      "cards": [],
+      "blocks": [
+        "入冬以来取暖电器进入销售"
+      ]
+    },
+    {
+      "kind": "text",
+      "y_in": 1.78125,
+      "h_in": 0.30625,
+      "items": [
+        "从细分品类看，取暖电器的"
+      ],
+      "cards": [],
+      "blocks": [
+        "从细分品类看，取暖电器的"
+      ]
+    },
+    {
+      "kind": "cards",
+      "y_in": 2.3875,
+      "h_in": 4.97,
+      "items": [
+        "heat_ratio_top5"
+      ],
+      "cards": [
+        "heat_ratio_top5"
+      ],
+      "blocks": []
+    },
+    {
+      "kind": "text",
+      "y_in": 7.6575,
+      "h_in": 0.30625,
+      "items": [
+        "分年龄看，各年龄段消费者"
+      ],
+      "cards": [],
+      "blocks": [
+        "分年龄看，各年龄段消费者"
+      ]
+    },
+    {
+      "kind": "cards",
+      "y_in": 8.26375,
+      "h_in": 4.97,
+      "items": [
+        "heat_age"
+      ],
+      "cards": [
+        "heat_age"
+      ],
+      "blocks": []
+    }
+  ],
+  "cards": [
+    {
+      "name": "heat_ratio_top5",
+      "kind": "thermometer",
+      "x_in": 0.4,
+      "y_in": 2.3875,
+      "w_in": 8.937504,
+      "h_in": 4.97,
+      "row": 3,
+      "column_span": 1,
+      "spec": {
+        "width_in": 8.937504,
+        "height_in": 4.97,
+        "chart_key": "heat_ratio_top5",
+        "chart_title": "取暖电器细分品类成交额环比增速TOP5",
+        "scale": {
+          "v_max": 11.0,
+          "h_in": 1.37,
+          "unit": "倍(超)",
+          "factor": 0.12454545454545456,
+          "domain": [
+            0.0,
+            11.0
+          ]
+        },
+        "elements": [
+          {
+            "id": "frame",
+            "type": "rect",
+            "role": "frame",
+            "x_in": 0.0,
+            "y_in": 0.0,
+            "w_in": 8.937504,
+            "h_in": 4.97,
+            "fill": "FFFFFF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": {
+              "border": "A8AEB6"
+            },
+            "image_path": null
+          },
+          {
+            "id": "title_band",
+            "type": "rect",
+            "role": "title_band",
+            "x_in": 0.3,
+            "y_in": 0.3,
+            "w_in": 8.337504,
+            "h_in": 0.5,
+            "fill": "D6DADF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "title",
+            "type": "text",
+            "role": "title",
+            "x_in": 0.45,
+            "y_in": 0.3,
+            "w_in": 8.037504,
+            "h_in": 0.5,
+            "fill": null,
+            "text": "取暖电器细分品类成交额环比增速TOP5",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": {
+              "align": "left"
+            },
+            "image_path": null
+          },
+          {
+            "id": "scale_note",
+            "type": "text",
+            "role": "scale_note",
+            "x_in": 0.45,
+            "y_in": 0.9500000000000001,
+            "w_in": 8.037504,
+            "h_in": 0.3,
+            "fill": null,
+            "text": "液柱越长，涨幅越高；满格约 11倍，球泡处为零点。",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": {
+              "align": "left"
+            },
+            "image_path": null
+          },
+          {
+            "id": "track_1",
+            "type": "rect",
+            "role": "track",
+            "x_in": 0.8,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "FFFFFF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "outline_1",
+            "type": "outline",
+            "role": "outline",
+            "x_in": 0.635,
+            "y_in": 2.195,
+            "w_in": 0.61,
+            "h_in": 1.935,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "cx = x_track + w_track / 2; cy = bulb_y + bulb_d / 2; R = bulb_d / 2 + bulb_ring_pad; cap_r = w_track / 2 + outline_pad; cap_top = y_track; tube_bottom = y_track + H_track; flare end = tube_bottom - neck_h",
+            "geometry": {
+              "cx": 0.94,
+              "cy": 3.825,
+              "R": 0.305,
+              "cap_r": 0.17,
+              "cap_top": 2.195,
+              "tube_bottom": 3.565,
+              "neck_h": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "liquid_1",
+            "type": "rect",
+            "role": "liquid",
+            "x_in": 0.89,
+            "y_in": 2.319545,
+            "w_in": 0.1,
+            "h_in": 1.2454545454545456,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 1,
+              "value": 10.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": "h_in = scale.factor * binding.value; w_in = liquid_w; x_in = x_track + (w_track - liquid_w) / 2",
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "bulb_1",
+            "type": "ellipse",
+            "role": "bulb",
+            "x_in": 0.68,
+            "y_in": 3.565,
+            "w_in": 0.52,
+            "h_in": 0.52,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "ticks_1",
+            "type": "ticks",
+            "role": "ticks",
+            "x_in": 0.8,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "count = tick_count; len = tick_len; thick = tick_thick; pad_top = cap_r = w_track / 2 + outline_pad; pad_bottom = neck_h; step = (H_track - pad_top - pad_bottom) / count; y_i = y_track + pad_top + (count - 1 - i) * step; x_right = x_track + w_track",
+            "geometry": {
+              "count": 13,
+              "len": 0.1,
+              "thick": 0.012,
+              "pad_top": 0.17,
+              "pad_bottom": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "label_1",
+            "type": "text",
+            "role": "label",
+            "x_in": 0.34,
+            "y_in": 1.825,
+            "w_in": 1.2,
+            "h_in": 0.34,
+            "fill": null,
+            "text": "欧式快热炉",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "value_1",
+            "type": "text",
+            "role": "value",
+            "x_in": 0.34,
+            "y_in": 4.115,
+            "w_in": 1.2,
+            "h_in": 0.18,
+            "fill": null,
+            "text": "10倍",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 1,
+              "value": 10.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "track_2",
+            "type": "rect",
+            "role": "track",
+            "x_in": 2.564376,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "FFFFFF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "outline_2",
+            "type": "outline",
+            "role": "outline",
+            "x_in": 2.399376,
+            "y_in": 2.195,
+            "w_in": 0.61,
+            "h_in": 1.935,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "cx = x_track + w_track / 2; cy = bulb_y + bulb_d / 2; R = bulb_d / 2 + bulb_ring_pad; cap_r = w_track / 2 + outline_pad; cap_top = y_track; tube_bottom = y_track + H_track; flare end = tube_bottom - neck_h",
+            "geometry": {
+              "cx": 2.704376,
+              "cy": 3.825,
+              "R": 0.305,
+              "cap_r": 0.17,
+              "cap_top": 2.195,
+              "tube_bottom": 3.565,
+              "neck_h": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "liquid_2",
+            "type": "rect",
+            "role": "liquid",
+            "x_in": 2.654376,
+            "y_in": 3.191364,
+            "w_in": 0.1,
+            "h_in": 0.37363636363636366,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 2,
+              "value": 3.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": "h_in = scale.factor * binding.value; w_in = liquid_w; x_in = x_track + (w_track - liquid_w) / 2",
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "bulb_2",
+            "type": "ellipse",
+            "role": "bulb",
+            "x_in": 2.444376,
+            "y_in": 3.565,
+            "w_in": 0.52,
+            "h_in": 0.52,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "ticks_2",
+            "type": "ticks",
+            "role": "ticks",
+            "x_in": 2.564376,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "count = tick_count; len = tick_len; thick = tick_thick; pad_top = cap_r = w_track / 2 + outline_pad; pad_bottom = neck_h; step = (H_track - pad_top - pad_bottom) / count; y_i = y_track + pad_top + (count - 1 - i) * step; x_right = x_track + w_track",
+            "geometry": {
+              "count": 13,
+              "len": 0.1,
+              "thick": 0.012,
+              "pad_top": 0.17,
+              "pad_bottom": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "label_2",
+            "type": "text",
+            "role": "label",
+            "x_in": 2.104376,
+            "y_in": 1.825,
+            "w_in": 1.2,
+            "h_in": 0.34,
+            "fill": null,
+            "text": "电油汀",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "value_2",
+            "type": "text",
+            "role": "value",
+            "x_in": 2.104376,
+            "y_in": 4.115,
+            "w_in": 1.2,
+            "h_in": 0.18,
+            "fill": null,
+            "text": "3倍",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 2,
+              "value": 3.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "track_3",
+            "type": "rect",
+            "role": "track",
+            "x_in": 4.328752,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "FFFFFF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "outline_3",
+            "type": "outline",
+            "role": "outline",
+            "x_in": 4.163752,
+            "y_in": 2.195,
+            "w_in": 0.61,
+            "h_in": 1.935,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "cx = x_track + w_track / 2; cy = bulb_y + bulb_d / 2; R = bulb_d / 2 + bulb_ring_pad; cap_r = w_track / 2 + outline_pad; cap_top = y_track; tube_bottom = y_track + H_track; flare end = tube_bottom - neck_h",
+            "geometry": {
+              "cx": 4.468752,
+              "cy": 3.825,
+              "R": 0.305,
+              "cap_r": 0.17,
+              "cap_top": 2.195,
+              "tube_bottom": 3.565,
+              "neck_h": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "liquid_3",
+            "type": "rect",
+            "role": "liquid",
+            "x_in": 4.418752,
+            "y_in": 3.191364,
+            "w_in": 0.1,
+            "h_in": 0.37363636363636366,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 3,
+              "value": 3.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": "h_in = scale.factor * binding.value; w_in = liquid_w; x_in = x_track + (w_track - liquid_w) / 2",
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "bulb_3",
+            "type": "ellipse",
+            "role": "bulb",
+            "x_in": 4.208752,
+            "y_in": 3.565,
+            "w_in": 0.52,
+            "h_in": 0.52,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "ticks_3",
+            "type": "ticks",
+            "role": "ticks",
+            "x_in": 4.328752,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "count = tick_count; len = tick_len; thick = tick_thick; pad_top = cap_r = w_track / 2 + outline_pad; pad_bottom = neck_h; step = (H_track - pad_top - pad_bottom) / count; y_i = y_track + pad_top + (count - 1 - i) * step; x_right = x_track + w_track",
+            "geometry": {
+              "count": 13,
+              "len": 0.1,
+              "thick": 0.012,
+              "pad_top": 0.17,
+              "pad_bottom": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "label_3",
+            "type": "text",
+            "role": "label",
+            "x_in": 3.868752,
+            "y_in": 1.825,
+            "w_in": 1.2,
+            "h_in": 0.34,
+            "fill": null,
+            "text": "踢脚线取暖器",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "value_3",
+            "type": "text",
+            "role": "value",
+            "x_in": 3.868752,
+            "y_in": 4.115,
+            "w_in": 1.2,
+            "h_in": 0.18,
+            "fill": null,
+            "text": "3倍",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 3,
+              "value": 3.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "track_4",
+            "type": "rect",
+            "role": "track",
+            "x_in": 6.093128,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "FFFFFF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "outline_4",
+            "type": "outline",
+            "role": "outline",
+            "x_in": 5.928128,
+            "y_in": 2.195,
+            "w_in": 0.61,
+            "h_in": 1.935,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "cx = x_track + w_track / 2; cy = bulb_y + bulb_d / 2; R = bulb_d / 2 + bulb_ring_pad; cap_r = w_track / 2 + outline_pad; cap_top = y_track; tube_bottom = y_track + H_track; flare end = tube_bottom - neck_h",
+            "geometry": {
+              "cx": 6.233128,
+              "cy": 3.825,
+              "R": 0.305,
+              "cap_r": 0.17,
+              "cap_top": 2.195,
+              "tube_bottom": 3.565,
+              "neck_h": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "liquid_4",
+            "type": "rect",
+            "role": "liquid",
+            "x_in": 6.183128,
+            "y_in": 3.191364,
+            "w_in": 0.1,
+            "h_in": 0.37363636363636366,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 4,
+              "value": 3.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": "h_in = scale.factor * binding.value; w_in = liquid_w; x_in = x_track + (w_track - liquid_w) / 2",
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "bulb_4",
+            "type": "ellipse",
+            "role": "bulb",
+            "x_in": 5.973128,
+            "y_in": 3.565,
+            "w_in": 0.52,
+            "h_in": 0.52,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "ticks_4",
+            "type": "ticks",
+            "role": "ticks",
+            "x_in": 6.093128,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "count = tick_count; len = tick_len; thick = tick_thick; pad_top = cap_r = w_track / 2 + outline_pad; pad_bottom = neck_h; step = (H_track - pad_top - pad_bottom) / count; y_i = y_track + pad_top + (count - 1 - i) * step; x_right = x_track + w_track",
+            "geometry": {
+              "count": 13,
+              "len": 0.1,
+              "thick": 0.012,
+              "pad_top": 0.17,
+              "pad_bottom": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "label_4",
+            "type": "text",
+            "role": "label",
+            "x_in": 5.633128,
+            "y_in": 1.825,
+            "w_in": 1.2,
+            "h_in": 0.34,
+            "fill": null,
+            "text": "取暖画",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "value_4",
+            "type": "text",
+            "role": "value",
+            "x_in": 5.633128,
+            "y_in": 4.115,
+            "w_in": 1.2,
+            "h_in": 0.18,
+            "fill": null,
+            "text": "3倍",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 4,
+              "value": 3.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "track_5",
+            "type": "rect",
+            "role": "track",
+            "x_in": 7.857504,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "FFFFFF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "outline_5",
+            "type": "outline",
+            "role": "outline",
+            "x_in": 7.692504,
+            "y_in": 2.195,
+            "w_in": 0.61,
+            "h_in": 1.935,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "cx = x_track + w_track / 2; cy = bulb_y + bulb_d / 2; R = bulb_d / 2 + bulb_ring_pad; cap_r = w_track / 2 + outline_pad; cap_top = y_track; tube_bottom = y_track + H_track; flare end = tube_bottom - neck_h",
+            "geometry": {
+              "cx": 7.997504,
+              "cy": 3.825,
+              "R": 0.305,
+              "cap_r": 0.17,
+              "cap_top": 2.195,
+              "tube_bottom": 3.565,
+              "neck_h": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "liquid_5",
+            "type": "rect",
+            "role": "liquid",
+            "x_in": 7.947504,
+            "y_in": 3.191364,
+            "w_in": 0.1,
+            "h_in": 0.37363636363636366,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 5,
+              "value": 3.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": "h_in = scale.factor * binding.value; w_in = liquid_w; x_in = x_track + (w_track - liquid_w) / 2",
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "bulb_5",
+            "type": "ellipse",
+            "role": "bulb",
+            "x_in": 7.737504,
+            "y_in": 3.565,
+            "w_in": 0.52,
+            "h_in": 0.52,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "ticks_5",
+            "type": "ticks",
+            "role": "ticks",
+            "x_in": 7.857504,
+            "y_in": 2.195,
+            "w_in": 0.28,
+            "h_in": 1.37,
+            "fill": "C9C9C9",
+            "text": null,
+            "binding": null,
+            "geometry_expr": "count = tick_count; len = tick_len; thick = tick_thick; pad_top = cap_r = w_track / 2 + outline_pad; pad_bottom = neck_h; step = (H_track - pad_top - pad_bottom) / count; y_i = y_track + pad_top + (count - 1 - i) * step; x_right = x_track + w_track",
+            "geometry": {
+              "count": 13,
+              "len": 0.1,
+              "thick": 0.012,
+              "pad_top": 0.17,
+              "pad_bottom": 0.18
+            },
+            "image_path": null
+          },
+          {
+            "id": "label_5",
+            "type": "text",
+            "role": "label",
+            "x_in": 7.397504,
+            "y_in": 1.825,
+            "w_in": 1.2,
+            "h_in": 0.34,
+            "fill": null,
+            "text": "电热地垫",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "value_5",
+            "type": "text",
+            "role": "value",
+            "x_in": 7.397504,
+            "y_in": 4.115,
+            "w_in": 1.2,
+            "h_in": 0.18,
+            "fill": null,
+            "text": "3倍",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 5,
+              "value": 3.0,
+              "unit": "倍(超)"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          }
+        ],
+        "semantic_tags": [],
+        "constraints": [
+          {
+            "id": "C1",
+            "kind": "bound",
+            "linear": true,
+            "expr": "0 <= x, x + w <= W, 0 <= y, y + h <= H",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "DATA",
+            "kind": "data_link",
+            "linear": true,
+            "expr": "h_liquid = scale.factor * binding.value; theta = arc_total * v / sum(v)",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "C3",
+            "kind": "shared_scale",
+            "linear": true,
+            "expr": "V_max = ceil(max(v) * 1.1) (preprocessed); sum(theta) = arc_total",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "C4",
+            "kind": "vertical_adjacent",
+            "linear": true,
+            "expr": "y_liquid + h_liquid = y_track + H_track (0 point); y_bulb = y_track + H_track (球顶 = 0 点), bulb_d 向下; y_value = y_bulb + bulb_d + gap_value; outline: cap_top = y_track, tube_bottom = y_track + H_track, R = bulb_d / 2 + bulb_ring_pad, cap_r = w_track / 2 + outline_pad, CX = x_track + w_track / 2, neck_h = 锥形收口高度; ticks: box = track box, count = tick_count, len = tick_len",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "C5",
+            "kind": "center",
+            "linear": true,
+            "expr": "x_child + w_child / 2 = x_parent + w_parent / 2",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "C6",
+            "kind": "equal_spacing",
+            "linear": true,
+            "expr": "x_{i+1} - x_i = d = max(gap_min, (W - 2*m - w_track)/(n-1))",
+            "reuse_from_thermometer": false
+          }
+        ],
+        "layout": {
+          "template": "thermometer",
+          "orient": "horizontal",
+          "margin": 0.5,
+          "gap_min": 0.5,
+          "top_reserve": 0.5,
+          "bottom_margin": 0.25,
+          "param_overrides": {
+            "margin": 0.5,
+            "h_title": 0.0,
+            "gap_title": 0.0,
+            "h_note": 0.0,
+            "gap_note": 0.0,
+            "bottom_margin": 0.25,
+            "w_track": 0.28,
+            "H_track": 3.0,
+            "gap_min": 0.5,
+            "bulb_d": 0.52,
+            "h_label": 0.34,
+            "h_value": 0.18,
+            "gap_label": 0.03,
+            "gap_value": 0.03,
+            "w_label": 1.2,
+            "liquid_w": 0.1,
+            "tick_len": 0.1,
+            "tick_thick": 0.012,
+            "outline_pad": 0.03,
+            "bulb_ring_pad": 0.045,
+            "neck_h": 0.18
+          },
+          "frame": {
+            "origin": [
+              0.3,
+              1.325
+            ],
+            "canvas": [
+              8.337504000000001,
+              3.2199999999999998
+            ],
+            "pad_in": 0.3,
+            "band_h_in": 0.5,
+            "canvas_in": [
+              8.937504,
+              4.97
+            ],
+            "fit": {
+              "scale": 1.0,
+              "target": [
+                8.937504,
+                4.97
+              ],
+              "font_scale": 0.828333
+            }
+          }
+        },
+        "content_bbox": [
+          0.34,
+          1.825,
+          8.257504,
+          2.47
+        ],
+        "frame_bbox": [
+          0.0,
+          0.0,
+          8.937504,
+          4.97
+        ]
+      }
+    },
+    {
+      "name": "heat_age",
+      "kind": "semicircle",
+      "x_in": 0.4,
+      "y_in": 8.26375,
+      "w_in": 6.074444,
+      "h_in": 4.97,
+      "row": 5,
+      "column_span": 1,
+      "spec": {
+        "width_in": 6.074444,
+        "height_in": 4.97,
+        "chart_key": "heat_ratio_top5",
+        "chart_title": "各年龄段消费者取暖电器成交额占比",
+        "scale": {
+          "v_max": 1.0,
+          "h_in": 180.0,
+          "unit": "deg",
+          "factor": 180.0,
+          "domain": [
+            0.0,
+            180.0
+          ]
+        },
+        "elements": [
+          {
+            "id": "frame",
+            "type": "rect",
+            "role": "frame",
+            "x_in": 0.0,
+            "y_in": 0.0,
+            "w_in": 6.074444,
+            "h_in": 4.97,
+            "fill": "FFFFFF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": {
+              "border": "A8AEB6"
+            },
+            "image_path": null
+          },
+          {
+            "id": "title_band",
+            "type": "rect",
+            "role": "title_band",
+            "x_in": 0.3,
+            "y_in": 0.3,
+            "w_in": 5.474444,
+            "h_in": 0.5,
+            "fill": "D6DADF",
+            "text": null,
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "title",
+            "type": "text",
+            "role": "title",
+            "x_in": 0.45,
+            "y_in": 0.3,
+            "w_in": 5.174444,
+            "h_in": 0.5,
+            "fill": null,
+            "text": "各年龄段消费者取暖电器成交额占比",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": {
+              "align": "left"
+            },
+            "image_path": null
+          },
+          {
+            "id": "scale_note",
+            "type": "text",
+            "role": "scale_note",
+            "x_in": 0.45,
+            "y_in": 0.9500000000000001,
+            "w_in": 5.174444,
+            "h_in": 0.3,
+            "fill": null,
+            "text": "扇面越大，占比越高；圆心那个百分比，就是它所在扇区自己的占比。",
+            "binding": null,
+            "geometry_expr": null,
+            "geometry": {
+              "align": "left"
+            },
+            "image_path": null
+          },
+          {
+            "id": "center",
+            "type": "text",
+            "role": "center",
+            "x_in": 2.303333,
+            "y_in": 2.66,
+            "w_in": 2.4699999999999998,
+            "h_in": 0.4,
+            "fill": null,
+            "text": "8.0%",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 1,
+              "value": 0.08,
+              "unit": "占比",
+              "center_slice_id": 1
+            },
+            "geometry_expr": "text = v_center / sum(v) * 100% (实时归一，禁止写死 80%)",
+            "geometry": {
+              "percent": 8.0,
+              "v_center": 0.08,
+              "sum_v": 1.0,
+              "center_slice_id": 1
+            },
+            "image_path": null
+          },
+          {
+            "id": "sector_1",
+            "type": "arc",
+            "role": "sector",
+            "x_in": 2.303333,
+            "y_in": 1.825,
+            "w_in": 2.4699999999999998,
+            "h_in": 2.4699999999999998,
+            "fill": "E8A08C",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 1,
+              "value": 0.08,
+              "unit": "占比"
+            },
+            "geometry_expr": "start_angle = alpha_{i-1}; end_angle = alpha_{i-1} + theta_i; theta_i = arc_total * binding.value / sum(v)",
+            "geometry": {
+              "start_angle": 180.0,
+              "end_angle": 194.4,
+              "theta": 14.4,
+              "R": 1.2349999999999999,
+              "cx": 3.538333,
+              "cy": 3.06
+            },
+            "image_path": null
+          },
+          {
+            "id": "legend_1",
+            "type": "text",
+            "role": "legend",
+            "x_in": 1.301111,
+            "y_in": 1.825,
+            "w_in": 1.0022220000000002,
+            "h_in": 0.3,
+            "fill": null,
+            "text": "25岁及以下 0.08",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 1,
+              "value": 0.08,
+              "unit": "占比"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "sector_2",
+            "type": "arc",
+            "role": "sector",
+            "x_in": 2.303333,
+            "y_in": 1.825,
+            "w_in": 2.4699999999999998,
+            "h_in": 2.4699999999999998,
+            "fill": "C2512F",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 2,
+              "value": 0.32,
+              "unit": "占比"
+            },
+            "geometry_expr": "start_angle = alpha_{i-1}; end_angle = alpha_{i-1} + theta_i; theta_i = arc_total * binding.value / sum(v)",
+            "geometry": {
+              "start_angle": 194.4,
+              "end_angle": 252.0,
+              "theta": 57.6,
+              "R": 1.2349999999999999,
+              "cx": 3.538333,
+              "cy": 3.06
+            },
+            "image_path": null
+          },
+          {
+            "id": "legend_2",
+            "type": "text",
+            "role": "legend",
+            "x_in": 1.301111,
+            "y_in": 2.225,
+            "w_in": 1.0022220000000002,
+            "h_in": 0.3,
+            "fill": null,
+            "text": "26岁至35岁 0.32",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 2,
+              "value": 0.32,
+              "unit": "占比"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "sector_3",
+            "type": "arc",
+            "role": "sector",
+            "x_in": 2.303333,
+            "y_in": 1.825,
+            "w_in": 2.4699999999999998,
+            "h_in": 2.4699999999999998,
+            "fill": "E8B85C",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 3,
+              "value": 0.32,
+              "unit": "占比"
+            },
+            "geometry_expr": "start_angle = alpha_{i-1}; end_angle = alpha_{i-1} + theta_i; theta_i = arc_total * binding.value / sum(v)",
+            "geometry": {
+              "start_angle": 252.0,
+              "end_angle": 309.6,
+              "theta": 57.6,
+              "R": 1.2349999999999999,
+              "cx": 3.538333,
+              "cy": 3.06
+            },
+            "image_path": null
+          },
+          {
+            "id": "legend_3",
+            "type": "text",
+            "role": "legend",
+            "x_in": 1.301111,
+            "y_in": 2.625,
+            "w_in": 1.0022220000000002,
+            "h_in": 0.3,
+            "fill": null,
+            "text": "36岁至45岁 0.32",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 3,
+              "value": 0.32,
+              "unit": "占比"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "sector_4",
+            "type": "arc",
+            "role": "sector",
+            "x_in": 2.303333,
+            "y_in": 1.825,
+            "w_in": 2.4699999999999998,
+            "h_in": 2.4699999999999998,
+            "fill": "7A9E7E",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 4,
+              "value": 0.17,
+              "unit": "占比"
+            },
+            "geometry_expr": "start_angle = alpha_{i-1}; end_angle = alpha_{i-1} + theta_i; theta_i = arc_total * binding.value / sum(v)",
+            "geometry": {
+              "start_angle": 309.6,
+              "end_angle": 340.20000000000005,
+              "theta": 30.6,
+              "R": 1.2349999999999999,
+              "cx": 3.538333,
+              "cy": 3.06
+            },
+            "image_path": null
+          },
+          {
+            "id": "legend_4",
+            "type": "text",
+            "role": "legend",
+            "x_in": 1.301111,
+            "y_in": 3.025,
+            "w_in": 1.0022220000000002,
+            "h_in": 0.3,
+            "fill": null,
+            "text": "46岁至55岁 0.17",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 4,
+              "value": 0.17,
+              "unit": "占比"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          },
+          {
+            "id": "sector_5",
+            "type": "arc",
+            "role": "sector",
+            "x_in": 2.303333,
+            "y_in": 1.825,
+            "w_in": 2.4699999999999998,
+            "h_in": 2.4699999999999998,
+            "fill": "6C7A89",
+            "text": null,
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 5,
+              "value": 0.11,
+              "unit": "占比"
+            },
+            "geometry_expr": "start_angle = alpha_{i-1}; end_angle = alpha_{i-1} + theta_i; theta_i = arc_total * binding.value / sum(v)",
+            "geometry": {
+              "start_angle": 340.20000000000005,
+              "end_angle": 360.00000000000006,
+              "theta": 19.8,
+              "R": 1.2349999999999999,
+              "cx": 3.538333,
+              "cy": 3.06
+            },
+            "image_path": null
+          },
+          {
+            "id": "legend_5",
+            "type": "text",
+            "role": "legend",
+            "x_in": 1.301111,
+            "y_in": 3.425,
+            "w_in": 1.0022220000000002,
+            "h_in": 0.3,
+            "fill": null,
+            "text": "56岁及以上 0.11",
+            "binding": {
+              "chart_key": "heat_ratio_top5",
+              "seq": 5,
+              "value": 0.11,
+              "unit": "占比"
+            },
+            "geometry_expr": null,
+            "geometry": null,
+            "image_path": null
+          }
+        ],
+        "semantic_tags": [],
+        "constraints": [
+          {
+            "id": "C1",
+            "kind": "bound",
+            "linear": true,
+            "expr": "0 <= x, x + w <= W, 0 <= y, y + h <= H",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "DATA",
+            "kind": "data_link",
+            "linear": true,
+            "expr": "h_liquid = scale.factor * binding.value; theta = arc_total * v / sum(v)",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "C3",
+            "kind": "shared_scale",
+            "linear": true,
+            "expr": "V_max = ceil(max(v) * 1.1) (preprocessed); sum(theta) = arc_total",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "C4",
+            "kind": "vertical_adjacent",
+            "linear": true,
+            "expr": "center/legend 堆叠：y_next = y_prev + h_prev + gap",
+            "reuse_from_thermometer": true
+          },
+          {
+            "id": "C5",
+            "kind": "center",
+            "linear": true,
+            "expr": "x_child + w_child / 2 = x_parent + w_parent / 2",
+            "reuse_from_thermometer": true
+          },
+          {
+            "id": "C7",
+            "kind": "radius_from_canvas",
+            "linear": true,
+            "expr": "R = min((W - 2*m)/2 - gap_legend - w_legend, (H - top_reserve - bottom_margin)/2) (preprocessed constant); legend column keeps w_legend",
+            "reuse_from_thermometer": false
+          },
+          {
+            "id": "C8",
+            "kind": "arc_recurrence",
+            "linear": true,
+            "expr": "alpha_0 = 180 (半圆定义); alpha_i = alpha_{i-1} + theta_i; theta_i = arc_total * v_i / sum(v); sum(theta) = arc_total",
+            "reuse_from_thermometer": false
+          }
+        ],
+        "layout": {
+          "template": "semicircle",
+          "orient": "radial",
+          "margin": 0.5,
+          "gap_min": 0.0,
+          "top_reserve": 0.5,
+          "bottom_margin": 0.25,
+          "param_overrides": {
+            "margin": 0.5,
+            "h_title": 0.0,
+            "gap_title": 0.0,
+            "h_note": 0.0,
+            "gap_note": 0.0,
+            "bottom_margin": 0.25,
+            "h_legend": 0.3,
+            "h_center": 0.4,
+            "gap_center": 0.1,
+            "gap_legend": 0.1,
+            "w_legend": 0.5
+          },
+          "frame": {
+            "origin": [
+              0.801111,
+              1.325
+            ],
+            "canvas": [
+              5.474444,
+              3.2199999999999998
+            ],
+            "pad_in": 0.3,
+            "band_h_in": 0.5,
+            "canvas_in": [
+              6.074444,
+              4.97
+            ],
+            "fit": {
+              "scale": 1.0,
+              "target": [
+                6.074444,
+                4.97
+              ],
+              "font_scale": 0.607444
+            }
+          }
+        },
+        "content_bbox": [
+          1.301111,
+          1.825,
+          3.472222,
+          2.47
+        ],
+        "frame_bbox": [
+          0.0,
+          0.0,
+          6.074444,
+          4.97
+        ]
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "name": "取暖电器换季热销：五类小",
+      "style": "title",
+      "align": "center",
+      "text": "取暖电器换季热销：五类小家电增速领跑",
+      "x_in": 0.4,
+      "y_in": 0.4,
+      "w_in": 9.2,
+      "h_in": 0.475,
+      "row": 0,
+      "column_span": 1,
+      "columns": 1,
+      "column_gutter_in": 0.0,
+      "lines": [
+        "取暖电器换季热销：五类小家电增速领跑"
+      ],
+      "line_groups": [
+        [
+          "取暖电器换季热销：五类小家电增速领跑"
+        ]
+      ]
+    },
+    {
+      "name": "入冬以来取暖电器进入销售",
+      "style": "body",
+      "align": "left",
+      "text": "入冬以来取暖电器进入销售旺季。平台数据显示，成交额环比明显走高，多款单品的增速超过一倍。",
+      "x_in": 0.4,
+      "y_in": 1.175,
+      "w_in": 9.2,
+      "h_in": 0.30625,
+      "row": 1,
+      "column_span": 1,
+      "columns": 1,
+      "column_gutter_in": 0.0,
+      "lines": [
+        "入冬以来取暖电器进入销售旺季。平台数据显示，成交额环比明显走高，多款单品的增速超过一倍。"
+      ],
+      "line_groups": [
+        [
+          "入冬以来取暖电器进入销售旺季。平台数据显示，成交额环比明显走高，多款单品的增速超过一倍。"
+        ]
+      ]
+    },
+    {
+      "name": "从细分品类看，取暖电器的",
+      "style": "body",
+      "align": "left",
+      "text": "从细分品类看，取暖电器的成交额环比增速以欧式快热炉、电油汀等品类居前，取暖画与电热地垫也进入前五。",
+      "x_in": 0.4,
+      "y_in": 1.78125,
+      "w_in": 9.2,
+      "h_in": 0.30625,
+      "row": 2,
+      "column_span": 1,
+      "columns": 1,
+      "column_gutter_in": 0.0,
+      "lines": [
+        "从细分品类看，取暖电器的成交额环比增速以欧式快热炉、电油汀等品类居前，取暖画与电热地垫也进入前五。"
+      ],
+      "line_groups": [
+        [
+          "从细分品类看，取暖电器的成交额环比增速以欧式快热炉、电油汀等品类居前，取暖画与电热地垫也进入前五。"
+        ]
+      ]
+    },
+    {
+      "name": "分年龄看，各年龄段消费者",
+      "style": "body",
+      "align": "left",
+      "text": "分年龄看，各年龄段消费者的取暖电器成交额占比差异并不悬殊，26岁至35岁人群贡献最多。",
+      "x_in": 0.4,
+      "y_in": 7.6575,
+      "w_in": 9.2,
+      "h_in": 0.30625,
+      "row": 4,
+      "column_span": 1,
+      "columns": 1,
+      "column_gutter_in": 0.0,
+      "lines": [
+        "分年龄看，各年龄段消费者的取暖电器成交额占比差异并不悬殊，26岁至35岁人群贡献最多。"
+      ],
+      "line_groups": [
+        [
+          "分年龄看，各年龄段消费者的取暖电器成交额占比差异并不悬殊，26岁至35岁人群贡献最多。"
+        ]
+      ]
+    }
+  ]
+}

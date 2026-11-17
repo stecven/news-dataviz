@@ -16,6 +16,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from loop.compose import compose_page                     # noqa: E402
+from loop.contract import dump_layout, write_layout_atomic  # noqa: E402
 from loop.layout import (CardSpec, LayoutSpec, TextBlock,  # noqa: E402
                          flow_layout, page_spec_path)
 from loop.render_page import render_layout                 # noqa: E402
@@ -69,8 +70,7 @@ def _spread_page():
     ]
     os.makedirs(out_dir, exist_ok=True)
     page = flow_layout(layout, flow)
-    with open(page_spec_path(out_dir), "w", encoding="utf-8") as fh:
-        json.dump(page.to_dict(), fh, ensure_ascii=False, indent=2)
+    write_layout_atomic(page_spec_path(out_dir), dump_layout(page))
     with open(os.path.join(out_dir, "flow.json"), "w", encoding="utf-8") as fh:
         json.dump([{"kind": type(x).__name__, "name": x.name,
                     "template": getattr(x, "kind", None),

@@ -1,0 +1,115 @@
+{
+  "width_in": 10.0,
+  "height_in": 15.0,
+  "margin_in": 0.4,
+  "gutter_in": 0.3,
+  "column_count": 1,
+  "column_gutter_in": 0.2,
+  "rows": [
+    {
+      "kind": "text",
+      "y_in": 0.4,
+      "h_in": 0.475,
+      "items": [
+        "换季消费观察"
+      ],
+      "cards": [],
+      "blocks": [
+        "换季消费观察"
+      ]
+    },
+    {
+      "kind": "text",
+      "y_in": 1.175,
+      "h_in": 0.30625,
+      "items": [
+        "这是一篇没有任何数据引用"
+      ],
+      "cards": [],
+      "blocks": [
+        "这是一篇没有任何数据引用"
+      ]
+    },
+    {
+      "kind": "text",
+      "y_in": 1.78125,
+      "h_in": 0.30625,
+      "items": [
+        "降温来得比往年早，人们提"
+      ],
+      "cards": [],
+      "blocks": [
+        "降温来得比往年早，人们提"
+      ]
+    }
+  ],
+  "cards": [],
+  "blocks": [
+    {
+      "name": "换季消费观察",
+      "style": "title",
+      "align": "center",
+      "text": "换季消费观察",
+      "x_in": 0.4,
+      "y_in": 0.4,
+      "w_in": 9.2,
+      "h_in": 0.475,
+      "row": 0,
+      "column_span": 1,
+      "columns": 1,
+      "column_gutter_in": 0.0,
+      "lines": [
+        "换季消费观察"
+      ],
+      "line_groups": [
+        [
+          "换季消费观察"
+        ]
+      ]
+    },
+    {
+      "name": "这是一篇没有任何数据引用",
+      "style": "body",
+      "align": "left",
+      "text": "这是一篇没有任何数据引用的短评，只谈季节变化与生活习惯。",
+      "x_in": 0.4,
+      "y_in": 1.175,
+      "w_in": 9.2,
+      "h_in": 0.30625,
+      "row": 1,
+      "column_span": 1,
+      "columns": 1,
+      "column_gutter_in": 0.0,
+      "lines": [
+        "这是一篇没有任何数据引用的短评，只谈季节变化与生活习惯。"
+      ],
+      "line_groups": [
+        [
+          "这是一篇没有任何数据引用的短评，只谈季节变化与生活习惯。"
+        ]
+      ]
+    },
+    {
+      "name": "降温来得比往年早，人们提",
+      "style": "body",
+      "align": "left",
+      "text": "降温来得比往年早，人们提前添置了过冬用品。",
+      "x_in": 0.4,
+      "y_in": 1.78125,
+      "w_in": 9.2,
+      "h_in": 0.30625,
+      "row": 2,
+      "column_span": 1,
+      "columns": 1,
+      "column_gutter_in": 0.0,
+      "lines": [
+        "降温来得比往年早，人们提前添置了过冬用品。"
+      ],
+      "line_groups": [
+        [
+          "降温来得比往年早，人们提前添置了过冬用品。"
+        ]
+      ]
+    }
+  ]
+}

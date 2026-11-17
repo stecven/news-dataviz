@@ -88,6 +88,8 @@ export function mountPage(container, doc, opts = {}) {
 }
 
 export { renderPage } from './render/stage.js';
-export { normalizeDoc, assertDoc, ContractError } from './doc.js';
+// `contractCapability` 是 P3 编辑/导出闸门的判定点（契约 1.1 起）：调用方照它决定
+// 这份图纸能不能编辑导出，不必自己拆版本号字符串。
+export { normalizeDoc, assertDoc, contractCapability, ContractError } from './doc.js';
 export { createTheme } from './theme.js';
-export { CONTRACT_VERSION } from './version.js';
+export { CONTRACT_VERSION, CONTRACT_MAJOR, SUPPORTED_VERSIONS } from './version.js';

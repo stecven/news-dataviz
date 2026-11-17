@@ -19,12 +19,36 @@ from loop.layout import (  # noqa: F401  （re-export：定义在 layout.py，�
     PageLayoutSpec, _element_from_dict, _spec_from_dict)
 from loop.schema_check import validate_doc
 
-#: 契约版本（``frontend/schema/pagelayout.schema.json`` 的 title 里那个 1.0）。
-CONTRACT_VERSION = "1.0"
+#: 契约版本（``frontend/schema/pagelayout.schema.json`` 的 title 里那个 1.1）。
+#: 与 ``frontend/src/version.js::CONTRACT_VERSION`` 是同一件事的两份副本，
+#: 由 ``tests/test_step39_version_literal_sync.py`` 守着不许漂移。
+CONTRACT_VERSION = "1.1"
+
+#: 主版本：只有主版本相同的契约才敢按本代码的字段口径去读。
+CONTRACT_MAJOR = CONTRACT_VERSION.split(".", 1)[0]
+
+#: 本代码**认识**的契约版本（主版本相同）。``"1.0"`` 是 P1/P2 时代的老几何，
+#: 读得进来、预览得了，但 P3 编辑器不许在它上面编辑导出（见 P3 方案 §5 兼容矩阵）。
+SUPPORTED_VERSIONS = ("1.0", "1.1")
 
 
 class ContractError(ValueError):
-    """写出侧不符合契约（``dump_layout`` 校验失败时抛）。"""
+    """不符合契约（写出侧校验失败、或读到不认识的主版本时抛）。"""
+
+
+class UnsupportedContractVersion(ContractError):
+    """读到本代码不认识的主版本（用户 m06462 / P3 方案 D9 的硬闸）。
+
+    宽松读的边界到此为止：缺版本号、次版本不认识都只告警降级读；**主版本不认识
+    就不猜**——字段语义可能整体换过，硬读出来的几何是错的，宁可让调用方看见。
+    """
+
+    def __init__(self, version: object):
+        self.version = version
+        self.supported = SUPPORTED_VERSIONS
+        super().__init__(
+            f"$.version: 读到 {version!r}，本代码只支持主版本 {CONTRACT_MAJOR!r}"
+            f"（{'、'.join(SUPPORTED_VERSIONS)}）")
 
 
 @dataclass
@@ -37,11 +61,17 @@ class ReadResult:
 
 
 def load_layout_json(doc: dict) -> ReadResult:
-    """宽松读回一份内存里的 ``pagelayout.json`` 文档（不缺键就报一声，不抛）。"""
+    """宽松读回一份内存里的 ``pagelayout.json`` 文档（不缺键就报一声，不抛）。
+
+    版本号是这里唯一会**抛**的东西，且只在主版本不认识时抛
+    （``UnsupportedContractVersion``，D9 硬闸）：缺键、次版本不认识都照旧降级读。
+    """
     warnings: list[str] = []
     version = doc.get("version")
     if version is None:
         warnings.append("$.version: 缺失，按 0.x 宽松读")
+    elif str(version).split(".", 1)[0] != CONTRACT_MAJOR:
+        raise UnsupportedContractVersion(version)
     elif version != CONTRACT_VERSION:
         warnings.append(f"$.version: 读到 {version!r}，本代码是 {CONTRACT_VERSION!r}")
     if "images" not in doc:

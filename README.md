@@ -22,7 +22,7 @@
 | `frontend/` | **前端出图线**：前端界面与调用层（调绘图引擎出图） |
 | `ingest/` | **素材采集线**：爬取数据图、清洗、登记进素材库、打语义标签 |
 | `scripts/` | 数据入库、素材生成与打标、各阶段演示脚本、数据库迁移 |
-| `tests/` | 676 个 unittest（`python -m unittest discover -s tests`） |
+| `tests/` | 757 个 unittest（`python -m unittest discover -s tests`） |
 | `docs/superpowers/specs/` | 设计文档、素材库语义 schema、端到端复盘 |
 | `.superpowers/sdd/` | 实施台账（第 1–30 步的决策与验证记录） |
 | `db/assets.db` | 素材库真源（含语义标签、词表、检索视图）——**二进制，只由素材线提交** |

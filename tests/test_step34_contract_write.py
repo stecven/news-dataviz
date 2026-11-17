@@ -60,7 +60,7 @@ class TestContractWriteEntry(unittest.TestCase):
     def test_dump_layout_fills_version_and_theme(self):
         doc = dump_layout(_layout(AUTO_LAYOUT_FIXTURE))
 
-        self.assertEqual(doc["version"], "1.0")
+        self.assertEqual(doc["version"], "1.1")
         self.assertEqual(doc["theme"], palette_summary())
         self.assertEqual(doc["theme"]["role_to_font"]["value"], "body")
         self.assertEqual(doc["theme"]["font_sizes"]["title"], 20)

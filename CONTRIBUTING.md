@@ -53,7 +53,7 @@ SQLite 文件没法做「行级合并」——git 只能整文件二选一。所
 - 合入前必须：
 
   ```bash
-  python -m unittest discover -s tests -q     # 现在应 676 个全绿
+  python -m unittest discover -s tests -q     # 现在应 757 个全绿
   ```
 
 ## 四、不要提交这些

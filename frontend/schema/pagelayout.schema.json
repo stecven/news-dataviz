@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "pagelayout.json（PageLayoutDoc v1.0）",
+  "title": "pagelayout.json（PageLayoutDoc v1.1）",
   "type": "object",
   "description": "可编辑报纸版式契约的唯一机器可读定义（draft 2020-12 的一个受限子集，只允许 loop/schema_check.py::SUPPORTED_KEYWORDS 里的关键字；$ref 是唯一例外——它不在那个白名单里，但取值照样受管，必须是同文档的 #/$defs/...，跨文档引用在编写期就被 unsupported_keywords() 报出）。它是「目标 1.0」的规格，不是对历史样本的描述：老样本缺 version / theme / images，今天必然校验失败（Spec §7 V5）。取值口径故意只卡结构：图元几何的权威定义在 Spec §5.5 与 loop/thermo_shape.py、loop/scaffold.py，schema 复述几何语义就会漂移。",
   "required": [
@@ -20,7 +20,8 @@
   "properties": {
     "version": {
       "type": ["string", "null"],
-      "description": "契约版本，新样本 \"1.0\"；老样本没有这个键（Spec §5.6 / D9 / D12）。"
+      "enum": ["1.0", "1.1"],
+      "description": "契约版本，新样本 \"1.1\"；\"1.0\" 是 P1/P2 时代的老几何（读得进来、预览得了，P3 不许在它上面编辑导出）；老样本没有这个键（Spec §5.6 / D9 / D12）。"
     },
     "theme": {
       "type": ["object", "null"],

@@ -596,11 +596,17 @@ def build_card(card: CardSpec, layout: LayoutSpec, frame: bool = True,
         except BoundaryError as exc:
             # 单卡适配器说「这个格子物理上装不下」→ 在排版层就是
             # 「这张卡片被逼得太小」，换成排版层能理解的错误类型。
-            raise LayoutFitError(
-                card.name,
-                f"{tw:.2f}×{th:.2f} in 的格子低于这张图的最小可行尺寸 "
-                f"{exc.min_size[0]:.2f}×{exc.min_size[1]:.2f} in（{exc.problems[0] if exc.problems else '内容装不下'}）",
-                min_pt=None, floor_pt=None) from exc
+            why = exc.problems[0] if exc.problems else "内容装不下"
+            if exc.min_size is None:
+                # 格子比 chrome（固定英寸数）还矮时压根不存在「最小可行尺寸」——
+                # minimum_target 会返回 None，直接索引它就是 TypeError。
+                detail = (f"{tw:.2f}×{th:.2f} in 的格子装不下这张图，"
+                          f"且量不出最小可行尺寸（{why}）")
+            else:
+                detail = (f"{tw:.2f}×{th:.2f} in 的格子低于这张图的最小可行尺寸 "
+                          f"{exc.min_size[0]:.2f}×{exc.min_size[1]:.2f} in（{why}）")
+            raise LayoutFitError(card.name, detail,
+                                 min_pt=None, floor_pt=None) from exc
 
     if stretch_to_in is not None:
         if target_w is None:
@@ -698,8 +704,9 @@ def _rows_for(items: list, layout: LayoutSpec, effective_span=None) -> list:
             return declared
         try:
             return int(effective_span(item)) or declared
-        except Exception:
-            # 探测失败不改行（真正的报错留给 _flush 按原路径抛出）。
+        except (LayoutFitError, BoundaryError, LayoutOverflowError):
+            # 探测失败不改行（真正的报错留给 _flush 按原路径抛出）；
+            # 只接版面域内的已知失败，真 bug 要能看到堆栈。
             return declared
 
     cur, used = [], 0
@@ -930,7 +937,9 @@ def flow_layout(layout: LayoutSpec, cards: list) -> PageLayoutSpec:
             return declared
         try:
             got = _box_cached(item)[3]
-        except Exception:
+        except (LayoutFitError, BoundaryError, LayoutOverflowError):
+            # 探测失败退回声明栏位（真正的报错留给 _flush 按原路径抛出）；
+            # 只接版面域内的已知失败，真 bug 要能看到堆栈。
             return declared
         return int(got) if got else declared
 

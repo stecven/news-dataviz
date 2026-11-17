@@ -36,6 +36,7 @@ from loop.asset_lookup import (find_assets_by_semantic, find_assets_by_theme,
                                semantic_theme_terms)
 from loop.contract import dump_layout, write_layout_atomic
 from loop.data_source import DB_PATH, load_points
+from loop.fit import BoundaryError
 from loop.layout import (CardSpec, ImageBlock, LayoutOverflowError, LayoutSpec,
                          TextBlock, build_card, card_span_needed, flow_layout,
                          page_spec_path)
@@ -637,8 +638,11 @@ def _drop_spilled_illustrations(result, layout: LayoutSpec) -> list:
     内部就是 ``flow_layout`` 用的那次升栏搜索），所以这里的判定与实际落位永远
     一致。返回被丢掉的插图名列表（顺序照流里的顺序）。
 
-    探测本身出问题（例如这张卡片满宽也装不下）时**不动**这一项：把原始报错
-    原样留给调用方，绝不把别的错误盖成「装不下」。
+    探测本身出问题（这张卡片物理上装不下，``card_span_needed`` 会漏出
+    ``BoundaryError``）时**不动**这一项：把原始报错原样留给调用方，绝不把
+    别的错误盖成「装不下」。「满宽也装不下」在 ``card_span_needed`` 内部已经
+    收成 ``column_count``，所以这里只接 ``BoundaryError``；其余异常都是真
+    bug，不该被静默吞掉。
     """
     spilled: list = []
     card = None
@@ -648,7 +652,7 @@ def _drop_spilled_illustrations(result, layout: LayoutSpec) -> list:
         elif isinstance(item, ImageBlock) and card is not None:
             try:
                 needed = card_span_needed(card, layout)
-            except Exception:
+            except BoundaryError:
                 continue
             if needed > int(getattr(card, "column_span", 1) or 1):
                 spilled.append((card, item))

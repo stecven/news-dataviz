@@ -3,9 +3,13 @@
  * P2 Task 4：整版渲染骨架（`renderPage`）与公开 API（`mountPage`）。
  *
  * 这里的期望值全部是从 Python 侧实测拿来的**字面量**（`out/demo/auto_layout`
- * 那张页的取值），不是"用实现再算一遍"：整页 1000×1500；卡1 贴在 (40, 239)、
- * PNG 尺寸 607×337；卡2 (40, 667)、607×496；标题首行 y=75、x=500；三段正文
- * 首行 y=139 / 199 / 627；两张插图 (677, 266, 283, 283) 与 (677, 774, 283, 283)。
+ * 那张页的取值），不是"用实现再算一遍"：整页 1000×1500；卡1 贴在 (100, 239)、
+ * PNG 尺寸 486×355；卡2 (96, 688)、494×495；标题首行 y=75、x=500；三段正文
+ * 首行 y=139 / 199 / 649；两张插图 (677, 239, 283, 283) 与 (677, 688, 283, 283)。
+ *
+ * ⚠ 这些字面量对齐的是 **PR-B 时代的排版产物**（HEAD f6c3508）。`out/` 由 Python
+ * 排版引擎生成，几何契约一变（例如卡片改为记录等比缩放后的真实外框、水平居中留白、
+ * 放不下就升栏）这些数字就会整体位移：届时必须重新实测并更新，别当成"实现坏了"。
  *
  * 金样本（`out/`）不入版本库：读不到时整组 skip，而不是红。
  */
@@ -18,7 +22,7 @@ import { renderPage } from '../src/render/stage.js';
 import { renderText } from '../src/render/text.js';
 import { mountPage } from '../src/index.js';
 import {
-  ascentPx, lineHeightPx, pxFromPt, roundPx,
+  ascentPx, lineHeightPx, pxFromPt, roundPx, truncPx,
 } from '../src/units.js';
 import { createTheme } from '../src/theme.js';
 
@@ -126,29 +130,34 @@ describe.skipIf(!AUTO)('renderPage：卡片 = 嵌套 svg（位置 round / 尺寸
     expect(svg.querySelectorAll('[data-card-name]').length).toBe(AUTO.cards.length);
   });
 
-  it('卡1 贴在 (40, 239)，尺寸 607×337（位置 round、尺寸 trunc 的两套口径）', () => {
+  it('卡1 贴在 (100, 239)，尺寸 486×355（位置 round、尺寸 trunc 的两套口径）', () => {
     const { svg } = render(AUTO);
     const card = svg.querySelector('[data-card-name="heat_ratio_top5"]');
     expect(card).not.toBeNull();
     expect(card.tagName.toLowerCase()).toBe('svg');
-    // 位置：roundPx(0.4)=40、roundPx(2.3875)=239（trunc 会给 238）
-    expect(card.getAttribute('x')).toBe('40');
+    // 位置：PR-B 起卡片在分到的格子里水平居中（格子 x=0.4、宽 6.072，画出来的真实外框
+    // 4.8656）⇒ x = 0.4 + (6.072 - 4.8656) / 2 = 1.0032 → roundPx = pyRound(100.32) = 100。
+    // y 仍是 roundPx(2.3875) = 239（trunc 会给 238，这条正好卡住 round/trunc 的分水岭）。
+    expect(card.getAttribute('x')).toBe('100');
     expect(card.getAttribute('y')).toBe('239');
-    // 尺寸：truncPx(6.072)=607、truncPx(3.37654)=337（round 会给 338）
-    expect(card.getAttribute('width')).toBe('607');
-    expect(card.getAttribute('height')).toBe('337');
-    expect(card.getAttribute('viewBox')).toBe('0 0 607 337');
+    // 尺寸：truncPx(4.8656) = 486（round 会给 487，仍是 trunc/round 的判别点）；
+    // truncPx(3.552267) = 355（round 也给 355，这里不再有分歧）。
+    expect(card.getAttribute('width')).toBe('486');
+    expect(card.getAttribute('height')).toBe('355');
+    expect(card.getAttribute('viewBox')).toBe('0 0 486 355');
     expect(card.getAttribute('overflow')).toBe('hidden');
   });
 
-  it('卡2 贴在 (40, 667)，尺寸 607×496', () => {
+  it('卡2 贴在 (96, 688)，尺寸 494×495', () => {
     const { svg } = render(AUTO);
     const card = svg.querySelector('[data-card-name="heat_age"]');
-    expect(card.getAttribute('x')).toBe('40');
-    expect(card.getAttribute('y')).toBe('667');
-    expect(card.getAttribute('width')).toBe('607');
-    expect(card.getAttribute('height')).toBe('496');
-    expect(card.getAttribute('viewBox')).toBe('0 0 607 496');
+    // 同样居中：x = 0.4 + (6.072 - 4.94625) / 2 = 0.962875 → roundPx = 96；
+    // y = 6.884151 → roundPx = 688；truncPx(4.94625) = 494、truncPx(4.9525) = 495。
+    expect(card.getAttribute('x')).toBe('96');
+    expect(card.getAttribute('y')).toBe('688');
+    expect(card.getAttribute('width')).toBe('494');
+    expect(card.getAttribute('height')).toBe('495');
+    expect(card.getAttribute('viewBox')).toBe('0 0 494 495');
   });
 
   it('卡片容器本身不带 data-el-id（节点口径只数契约元素）', () => {
@@ -213,9 +222,16 @@ describe.skipIf(!AUTO)('renderPage：整版块（text-anchor 三档 + 无 dy）'
       .toBe(roundPx(block.y_in + 0.05) + ascentPx(pxFromPt(pt)));
   });
 
-  it('三段正文：首行 y=139/199/627、左对齐 x=40、字号 15（无竖直居中 dy）', () => {
+  it('三段正文：首行 y=139/199/649、左对齐 x=40、字号 15（无竖直居中 dy）', () => {
     const { svg } = render(AUTO);
-    const expected = [139, 199, 627];
+    // 前两段 y_in 仍是 1.175 / 1.78125；第三段（分年龄看…）y_in 由 6.06404 抬到 6.277901，
+    // 因为第 3 行的行高 rows[3].h_in 由 3.37654 变成 3.590401（直接读 pagelayout.json 可核对）：
+    //   y = 2.3875(rows[3].y_in) + 3.590401(rows[3].h_in) + 0.3(gutter) = 6.277901。
+    // 行高变化的来源也写在样本里：新契约下这一行按卡片的自然尺寸记高（heat_ratio_top5 的
+    // spec.layout.frame.fit.target = [6.072, 3.590401]），而画出来的真实外框是
+    // frame.canvas_in = [4.8656, 3.552267]；旧契约里卡片直接填格子，行高就等于外框高 3.37654。
+    // roundPx(6.277901 + 0.05) + ascentPx(pxFromPt(11)) = 633 + 16 = 649（旧 611 + 16 = 627）。
+    const expected = [139, 199, 649];
     [1, 2, 3].forEach((i, k) => {
       const block = AUTO.blocks[i];
       const nodes = textsOf(svg, block.name);
@@ -424,19 +440,23 @@ describe.skipIf(!MULTICOL)('renderPage：多栏整版块逐栏渲染（R44 修�
   });
 });
 
-describe.skipIf(!MULTICOL)('renderPage：卡片尺寸走 trunc（919 这张卡是唯一分水岭）', () => {
-  it('_spread 的 heat_ratio_top5 卡宽 919（不是 round 的 920）', () => {
-    // 9.2*100 === 919.9999999999999 —— Python int() 截断得 919，int(round()) 得 920。
-    // **只有这张卡**能区分 trunc/round：同一份图纸里另外两张卡是 4.5in（450 整），
-    // auto_layout 的卡是 6.072in（607.2，两套口径同为 607）。把这行数字钉住，
-    // 谁把 `renderCard` 的 `truncPx` 换成 `roundPx` 就会在这里红。
-    expect(9.2 * 100).toBe(919.9999999999999);
+describe.skipIf(!MULTICOL)('renderPage：卡片尺寸走 trunc（823 这张卡是分水岭之一）', () => {
+  it('_spread 的 heat_ratio_top5 卡宽 823（不是 round 的 824）', () => {
+    // 这张卡占了整行格子（9.2in），画出来的真实外框是 8.2384in（水平居中留白）：
+    // 8.2384 * 100 = 823.84 —— truncPx 得 823、roundPx（half-to-even）得 824，两套口径分歧。
+    // （PR-B 前它是 9.2in：9.2*100 === 919.9999999999999，同样分歧；
+    //  现在 auto_layout 的卡 4.8656in=486.56、4.94625in=494.625 也各自分歧，
+    //  它不再是「唯一」分水岭，但依然是钉住 trunc 口径的那张卡：
+    //  谁把 renderCard 的 truncPx 换成 roundPx 就会在这里红。）
+    expect(truncPx(8.2384)).toBe(823);
+    expect(roundPx(8.2384)).toBe(824);
     const { svg } = render(MULTICOL);
     const card = svg.querySelector('[data-card-name="heat_ratio_top5"]');
     expect(card).not.toBeNull();
-    expect(card.getAttribute('width')).toBe('919');
-    expect(card.getAttribute('height')).toBe('497');
-    expect(card.getAttribute('viewBox')).toBe('0 0 919 497');
+    expect(card.getAttribute('width')).toBe('823');
+    // 高 4.9434in：trunc 494、round 也 494，这里不构成分歧。
+    expect(card.getAttribute('height')).toBe('494');
+    expect(card.getAttribute('viewBox')).toBe('0 0 823 494');
   });
 });
 
@@ -446,8 +466,12 @@ describe.skipIf(!AUTO)('renderPage：插图（rect 是盒内真实绘制矩形�
     const images = Array.from(svg.querySelectorAll('image'));
     expect(images.length).toBe(AUTO.images.length);
     const expected = [
-      ['illustration_17', 677, 266, 283, 283],
-      ['illustration_26', 677, 774, 283, 283],
+      // PR-B 起插图外盒与 rect 的偏移归零（rect 的 y 分量 0.27427 / 1.07 → 0），
+      // 于是 y = roundPx(插图 y_in + rect[1]) 由 roundPx(2.66177)=266 / roundPx(7.74029)=774
+      // 变成 roundPx(2.3875)=239 / roundPx(6.884151)=688；x=roundPx(6.772)=677、
+      // w=h=roundPx(2.828)=283 三者不变。
+      ['illustration_17', 677, 239, 283, 283],
+      ['illustration_26', 677, 688, 283, 283],
     ];
     expected.forEach(([name, x, y, w, h]) => {
       const node = svg.querySelector(`image[data-el-id="${name}"]`);

@@ -207,17 +207,26 @@ describe.skipIf(!HAS_SAMPLE)('renderText（card 模式）', () => {
     expect(Number(first.getAttribute('y'))).toBe(boxPxTrunc(el)[1] + ascentPx(16));
   });
 
-  it('真实夹具的 title：左对齐单行，dy === (50-21)/2 === 14.5', async () => {
+  it('真实夹具的 title：左对齐单行，dy === (50-18)/2 === 16', async () => {
     const { renderText } = await import('../src/render/text.js');
     const { svg, theme } = stage();
     const el = elementById('title');
-    expect(el.font_pt).toBe(11.26);
+    // PR-B 起卡片记录的是「等比缩放后的真实外框」：卡片外框由格子宽 6.072in 缩到 4.8656in，
+    // 这个 title 盒随之由 5.172in 缩到 3.9656in，Python 侧的字号适配把 font_pt 由 11.26
+    // 调到 9.73（9.73 是本代样本里的实测值）。注意**不能**把它写成「字号随盒宽等比」：
+    // 实测 11.26/9.73 = 1.157 ≠ 5.172/3.9656 = 1.304；适配规则在 loop/fit.py 内部，
+    // 本次不动 Python，所以下面只做「由 el.font_pt 推导」这一层（可独立复算）：
+    //   pxFromPt(9.73) = pyRound(13.5139) = 14、lineHeightPx(9.73) = pyRound(18.2437) = 18
+    //   ⇒ dy = (50 - 18) / 2 = 16、ascentPx(14) = ceil(14.812) = 15 ⇒ y = 30 + 16 + 15 = 61。
+    expect(el.font_pt).toBe(9.73);
     expect(el.lines.length).toBe(1);
     const group = renderText(svg, el, { theme, mode: 'card' });
     const first = group.querySelector('text');
     const [, y0, , y1] = boxPxTrunc(el);
     expect(y1 - y0).toBe(50);
-    expect(Number(first.getAttribute('y'))).toBe(y0 + 14.5 + ascentPx(16));
+    expect(Number(first.getAttribute('y')))
+      .toBe(y0 + dyFor(el, 'left', el.lines.length) + ascentPx(pxFromPt(el.font_pt)));
+    expect(Number(first.getAttribute('y'))).toBe(61);
     expect(first.textContent).toBe('取暖电器细分品类成交额环比增速TOP5');
   });
 
@@ -483,7 +492,10 @@ describe.skipIf(!HAS_PAGE_SAMPLE)('renderElement（其余图元，Step 4 判据�
     expect(Number(rect.getAttribute('y'))).toBe(y0);
     expect(Number(rect.getAttribute('width'))).toBe(x1 - x0);
     expect(Number(rect.getAttribute('height'))).toBe(y1 - y0);
-    expect(Number(rect.getAttribute('width'))).toBe(607);
+    // frame 盒 = 卡片真实外框 4.8656×3.552267in（PR-B 前是分到的格子 6.072in 宽）
+    // ⇒ truncPx(486.56) = 486、truncPx(355.2267) = 355。
+    expect(Number(rect.getAttribute('width'))).toBe(486);
+    expect(Number(rect.getAttribute('height'))).toBe(355);
   });
 
   it('rect + role="frame" 缺 geometry.border 时退回 BORDER_ROLE（neutral_mid）', async () => {
@@ -650,9 +662,19 @@ describe.skipIf(!HAS_PAGE_SAMPLE)('renderElement（其余图元，Step 4 判据�
       expect(Number(node.getAttribute('width'))).toBe(expected.width);
       expect(Number(node.getAttribute('height'))).toBe(expected.height);
     }
-    // 第一个刻度（自下而上）的实测量：x=89、y=198、8×1。
-    expect(Number(nodes[0].getAttribute('x'))).toBe(89);
-    expect(Number(nodes[0].getAttribute('y'))).toBe(198);
+    // 第一个刻度（自下而上）的实测量：x=57、y=273、4×0。
+    // PR-B 前这份夹具的 ticks 盒是 [0.735, 2.09815, 0.2436, 0.01704]：h_in 只有 0.01704in，
+    // 比 pad_top+pad_bottom（0.1479+0.1566）还小，于是 step=(h_in-pad_top-pad_bottom)/count
+    // 为负、刻度串上下颠倒（当时量到的 y=198 就是这么来的）。PR-B 起 ticks 盒跟着等比缩放后的
+    // 真实外框走：[0.4978, 1.6091, 0.1204, 1.29]，h_in=1.29 等于 scale.h_in，step 恢复为
+    // (1.29-0.0731-0.0774)/13=0.0876538 > 0，刻度自下而上：
+    //   right=0.4978+0.1204=0.6182、x=0.6182-0.043=0.5752 ⇒ trunc 57
+    //   top=1.6091+0.0731=1.6822、y=1.6822+12×0.0876538=2.734046 ⇒ trunc 273
+    //   thick=0.00516in=0.516px ⇒ 高 trunc 后为 0。
+    expect(Number(nodes[0].getAttribute('x'))).toBe(57);
+    expect(Number(nodes[0].getAttribute('y'))).toBe(273);
+    expect(Number(nodes[0].getAttribute('width'))).toBe(4);
+    expect(Number(nodes[0].getAttribute('height'))).toBe(0);
     expect(svg.querySelectorAll('[data-el-id="ticks_1"]').length).toBe(13);
   });
 
@@ -678,8 +700,12 @@ describe.skipIf(!HAS_PAGE_SAMPLE)('renderElement（其余图元，Step 4 判据�
     const [px0, py0] = pairs[0].split(',').map(Number);
     expect(px0).toBeCloseTo(pxFromIn(expectedPts[0][0]), 6);
     expect(py0).toBeCloseTo(pxFromIn(expectedPts[0][1]), 6);
-    expect(px0).toBeCloseTo(70.89, 6);
-    expect(py0).toBeCloseTo(224.605, 6);
+    // 首点 = [x_in + R - cap_r, y_in + cap_r]；PR-B 起 outline 盒等比缩到
+    // [0.42685, 1.6091, 0.2623, 1.53295]、geo.R 0.26535→0.13115、cap_r 0.1479→0.0731：
+    //   x = 0.42685 + 0.13115 - 0.0731 = 0.4849 ⇒ 48.49
+    //   y = 1.6091 + 0.0731 = 1.6822 ⇒ 168.22（旧值 70.89 / 224.605）
+    expect(px0).toBeCloseTo(48.49, 6);
+    expect(py0).toBeCloseTo(168.22, 6);
     // 首末点重合（闭合环）。
     const last = pairs[pairs.length - 1].split(',').map(Number);
     expect(last[0]).toBeCloseTo(px0, 6);
@@ -720,8 +746,13 @@ describe.skipIf(!HAS_PAGE_SAMPLE)('renderElement（其余图元，Step 4 判据�
     expect(Number(img.getAttribute('y'))).toBe(y0);
     expect(Number(img.getAttribute('width'))).toBe(x1 - x0);
     expect(Number(img.getAttribute('height'))).toBe(y1 - y0);
-    expect(Number(img.getAttribute('width'))).toBe(220);
-    expect(Number(img.getAttribute('height'))).toBe(220);
+    // page 样本的 ph 卡 canvas 高由 5.2in 缩到 3.6in（PR-B 记录等比缩放后的真实外框），
+    // Python 侧 placeholder_fit 把占位图由 2.2in 缩到 1.665in=166.5px，样本里记着
+    // `layout.placeholder_fit.after = [1.0925, 0.0925, 1.665, 1.665]`、`frame.origin = [0.3, 1.45]`
+    // ⇒ 元素盒 = [0.3+1.0925, 1.45+0.0925, 1.665, 1.665] = [1.3925, 1.5425, 1.665, 1.665]，
+    // trunc 后 139/154/305/320，宽高都是 305-139 = 320-154 = 166（旧值 220 = 2.2in 的截断）。
+    expect(Number(img.getAttribute('width'))).toBe(166);
+    expect(Number(img.getAttribute('height'))).toBe(166);
   });
 
   it('image：resolveAsset 返回 null 时画虚线占位 + 一条警告，绝不抛', async () => {

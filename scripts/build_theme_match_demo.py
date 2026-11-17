@@ -6,6 +6,13 @@
   素材库 `assets/icons/radiator_soft.png`（暖气片）；第二段同样抽到「取暖电器」，
   但那张图已被这一页用过，于是**降级**到图表语义「占比构成」→ `people.png`
   —— 正是用户 m06739 裁定的那条路径。两张图 ``asset_id`` 不同。
+
+  注意（用户 m05920 之后）：温度计在这一栏里装不下，会被升到整行，右侧再没有
+  并排位置；编排层先把原本并排的插图**收拢**到下一行、让紧随其后的那段正文退回
+  单栏去填空栏 —— 插图不再白占一整行，两张插图因此都留在页面上，``flow.json``
+  的 ``notes`` 里记一条 ``illustration_tucked``。只有收拢也装不下时才回到
+  m05779 的丢图策略（``illustration_dropped``）。选图的决策树本身没变
+  （``summary.json`` 里两段的 ``matched_by`` 照旧是 theme / chart_semantic）。
 * ``_no_theme/``：稿子只提图表语义、一个主题词都不含（讲的是「加热电器」，
   不是主题词表里的词）→ 每段 ``theme`` 都是 ``None``，插图回落到按
   ``chart_semantic`` 选。用来证明降级路径不是摆设。
@@ -64,6 +71,12 @@ def _report(result) -> dict:
                      "template": match.template,
                      "theme": match.theme,
                      "illustration": match.illustration,
+                     # ``picked_basis`` 是**选图决策树**的结果（theme /
+                     # chart_semantic），``on_page`` 说明这张图有没有真的排上
+                     # 这一页 —— 用户 m05920 之后编排层先收拢、收不拢才丢图，
+                     # 两者正常一致；分开记是为了不一致时一眼看得出是哪一步丢的。
+                     "picked_basis": match.illustration_basis,
+                     "on_page": picked is not None,
                      "asset_id": picked["asset_id"] if picked else None,
                      "path": picked["path"] if picked else None,
                      "matched_by": picked["matched_by"] if picked else None})
@@ -100,11 +113,14 @@ def _contact_sheet(a: str, b: str):
     sheet_path = os.path.join(OUT, "_sheet_all.png")
     sheet.save(sheet_path)
 
-    # 两条带：主题命中的暖气片（第一张）与降级后的人形（第二张），2 倍放大。
+    # 放大带按**页面上真实存在的插图**生成，一张一条：``tag != semantic`` 就是
+    # 按主题选的（标注「主题命中」），否则是被占用后降级（标注「被占用后降级」）。
+    # 用户 m05920 之后不再假设"一定有两张"：编排层先收拢、收不拢才丢掉被挤下来
+    # 的那张（这里原来写死 images[0]/[1]，少一张就 IndexError）。
     page = json.load(open(os.path.join(OUT, "pagelayout.json"), encoding="utf-8"))
     bands = []
-    for which, tag in ((0, "主题命中"), (1, "被占用后降级")):
-        img = page["images"][which]
+    for img in page["images"]:
+        tag = "主题命中" if img["tag"] != img["semantic"] else "被占用后降级"
         dx, dy, dw, dh = img["rect"]
         box = (round((img["x_in"] + dx - 1.0) * 100),
                round((img["y_in"] + dy - 0.6) * 100),
@@ -114,7 +130,8 @@ def _contact_sheet(a: str, b: str):
         bands.append((f"{tag} · {img['name']} · {img['path']}",
                       crop.resize((crop.width * 2, crop.height * 2))))
     zoom_h = max(b.height for _, b in bands)
-    zoom = Image.new("RGB", (max(b.width for _, b in bands), zoom_h * 2 + 96),
+    zoom = Image.new("RGB", (max(b.width for _, b in bands),
+                             zoom_h * len(bands) + 48 * len(bands)),
                      (238, 238, 238))
     zd = ImageDraw.Draw(zoom)
     y = 0
@@ -140,8 +157,9 @@ def main():
     for key, block in summary.items():
         print(f"[{key}] preview={block['preview']} 插图 {block['image_count']} 张")
         for row in block["matches"]:
-            print(f"   theme={str(row['theme']):8s} basis={str(row['matched_by']):15s}"
-                  f" asset={row['asset_id']} {row['path']}  <- {row['dataset']}")
+            print(f"   theme={str(row['theme']):8s} basis={str(row['picked_basis']):15s}"
+                  f" 上页={str(row['on_page']):5s} asset={row['asset_id']} "
+                  f"{row['path']}  <- {row['dataset']}")
     print("总览   ->", sheet)
     print("放大带 ->", zoom)
 

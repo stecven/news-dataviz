@@ -36,8 +36,10 @@ from loop.asset_lookup import (find_assets_by_semantic, find_assets_by_theme,
                                semantic_theme_terms)
 from loop.contract import dump_layout, write_layout_atomic
 from loop.data_source import DB_PATH, load_points
-from loop.layout import (CardSpec, ImageBlock, LayoutSpec, TextBlock,
-                         build_card, flow_layout, page_spec_path)
+from loop.fit import BoundaryError
+from loop.layout import (CardSpec, ImageBlock, LayoutOverflowError, LayoutSpec,
+                         TextBlock, build_card, card_span_needed, flow_layout,
+                         page_spec_path)
 from loop.selector import (SEMANTIC_COMPARE, SEMANTIC_SHARE,
                            features_from_points, select)
 
@@ -525,6 +527,146 @@ def build_flow(text: str, *, layout: LayoutSpec | None = None,
     return ComposeResult(flow=flow, matches=matches, notes=notes, themes=themes)
 
 
+def _next_item(flow: list, index: int):
+    """紧跟在 ``index`` 之后的那一项；没有就是 ``None``。"""
+    wanted = index + 1
+    return flow[wanted] if 0 <= wanted < len(flow) else None
+
+
+def _tuck_spilled_illustrations(result, layout: LayoutSpec) -> tuple:
+    """把被升栏卡片挤下来的插图**收进下一行的空栏**里（用户 m05920）。
+
+    升到整行的卡片右侧再没有并排位置，原本贴在它旁边的插图只能顺延到下一行
+    —— 而那一行的另一栏空着，插图白占一整行的高度（2.84 in + gutter）。整页
+    因此装不下时，先试这一招：让**下一段正文退回单栏**去填那个空栏，插图与它
+    并成一行。这样两张插图都留在页面上，不用丢任何一张。
+
+    只动「确实会被升栏」的卡片旁边的插图 —— 判定问的是排版层**同一个**
+    ``card_span_needed``（升栏搜索），所以这里的判断与实际落位永远一致；并且
+    只在那段正文原本声明了多栏时才动它，否则这一处本来就已经并排好了。
+
+    返回 ``(被收拢的插图名, 回滚记录)``；一处都收拢不了时返回 ``([], [])``。
+    """
+    tucked: list = []
+    undo: list = []
+    for match in result.matches:
+        if not match.illustration or not match.card_name:
+            continue
+        card = next((it for it in result.flow
+                     if isinstance(it, CardSpec) and it.name == match.card_name), None)
+        found = next(((i, it) for i, it in enumerate(result.flow)
+                      if isinstance(it, ImageBlock) and it.name == match.illustration),
+                     None)
+        if card is None or found is None:
+            continue
+        # ``card_span_needed`` 与 ``flow_layout`` 走同一个升栏搜索，自己已经把
+        # 「满宽也装不下」收成了 ``column_count``（真报错留给 ``flow_layout``），
+        # 所以这里不兜异常 —— 它真抛出来就是代码问题，不该被静默跳过。
+        needed = card_span_needed(card, layout)
+        if needed <= 1:
+            continue                    # 不会被升栏 → 现有并排安排照旧
+        index, _image = found
+        follower = _next_item(result.flow, index)
+        if not isinstance(follower, TextBlock) or follower.column_span <= 1:
+            continue                    # 下一项不是多栏正文 → 这一处没法并排
+        undo.append((card, int(card.column_span or 1),
+                     follower, follower.column_span, follower.columns))
+        card.column_span = needed       # 声明真实栏位：它就是整行，别让打包器再猜
+        follower.column_span = 1
+        follower.columns = 1
+        tucked.append(match.illustration)
+    return tucked, undo
+
+
+def _undo_tuck(undo: list) -> None:
+    """把 ``_tuck_spilled_illustrations`` 动的栏位改回去。"""
+    for card, span, follower, text_span, text_columns in undo:
+        card.column_span = span
+        follower.column_span = text_span
+        follower.columns = text_columns
+
+
+def _fit_after_overflow(result, layout: LayoutSpec, exc: LayoutOverflowError):
+    """整页装不下时的两级补救（用户 m05920）。
+
+    **一级「收拢」**：升到整行的卡片右侧没有并排位置，插图顺延到下一行会白占
+    一整行；让下一段正文退回单栏去填那个空栏，两张插图就都能留下。
+
+    **二级「丢图」**：收拢也装不下（或压根没有可收拢的）才回到用户 m05779 的
+    裁定 ②，丢掉被挤下来的插图并记一条 note —— 只丢插图，卡片与文字一个不丢。
+
+    两级都不行就把**原来**那个异常原样抛出去：这一页的问题不是插图，报错不该
+    被换成别的说法（裁定 ③）。
+    """
+    tucked, undo = _tuck_spilled_illustrations(result, layout)
+    if tucked:
+        try:
+            page = flow_layout(layout, result.flow)
+        except LayoutOverflowError:
+            _undo_tuck(undo)            # 收了也装不下 → 回到原来的流再试丢图
+        else:
+            result.notes.append({
+                "kind": "illustration_tucked",
+                "images": tucked,
+                "reason": "卡片升到整行，插图顺延到下一行并让下一段正文退回单栏填补空栏",
+            })
+            return page
+    dropped = _drop_spilled_illustrations(result, layout)
+    if not dropped:
+        raise exc                       # 没有可丢的插图 → 原样抛（裁定 ③）
+    result.notes.append({
+        "kind": "illustration_dropped",
+        "images": dropped,
+        "reason": "卡片升到整行后整页装不下，按用户 m05779 第③条顺延/留白",
+    })
+    try:
+        return flow_layout(layout, result.flow)
+    except LayoutOverflowError:
+        # 丢掉插图还是装不下 → 把**原来**那个异常原样抛出去（裁定 ③）
+        raise exc from None
+
+
+def _drop_spilled_illustrations(result, layout: LayoutSpec) -> list:
+    """丢掉「卡片被升到整行、右侧再没有并排位置」的那些插图（用户 m05779）。
+
+    编排时卡片声明的是 1 栏（好和插图并排），但严格等比之后一栏宽常常装不下
+    这张图 —— 排版层会把它**升到整行**。升到整行就没有右侧位置了：原本贴在
+    它旁边的插图只能顺延到下一行（第一次排版就是这么算的），整页因此装不下
+    时才按裁定 ② 丢掉这一处插图 —— **只丢插图，卡片与文字一个不丢**。
+
+    「会不会被升栏」问的是排版层**同一个**规则（``layout.card_span_needed``，
+    内部就是 ``flow_layout`` 用的那次升栏搜索），所以这里的判定与实际落位永远
+    一致。返回被丢掉的插图名列表（顺序照流里的顺序）。
+
+    探测本身出问题（这张卡片物理上装不下，``card_span_needed`` 会漏出
+    ``BoundaryError``）时**不动**这一项：把原始报错原样留给调用方，绝不把
+    别的错误盖成「装不下」。「满宽也装不下」在 ``card_span_needed`` 内部已经
+    收成 ``column_count``，所以这里只接 ``BoundaryError``；其余异常都是真
+    bug，不该被静默吞掉。
+    """
+    spilled: list = []
+    card = None
+    for item in result.flow:
+        if isinstance(item, CardSpec):
+            card = item
+        elif isinstance(item, ImageBlock) and card is not None:
+            try:
+                needed = card_span_needed(card, layout)
+            except BoundaryError:
+                continue
+            if needed > int(getattr(card, "column_span", 1) or 1):
+                spilled.append((card, item))
+    if not spilled:
+        return []
+    gone = {id(image) for _card, image in spilled}
+    result.flow[:] = [it for it in result.flow if id(it) not in gone]
+    for card, _image in spilled:
+        for match in result.matches:
+            if match.card_name == card.name:
+                match.illustration = None
+    return [image.name for _card, image in spilled]
+
+
 def compose_page(text: str, out_dir: str, *, width_in: float = 10.0,
                  height_in: float = 15.0, margin_in: float = 0.4,
                  gutter_in: float = 0.3, db_path: str = DB_PATH,
@@ -543,7 +685,12 @@ def compose_page(text: str, out_dir: str, *, width_in: float = 10.0,
     result = build_flow(text, layout=layout, db_path=db_path,
                         on_unapplicable=on_unapplicable)
     os.makedirs(out_dir, exist_ok=True)
-    page = flow_layout(layout, result.flow)
+    try:
+        page = flow_layout(layout, result.flow)
+    except LayoutOverflowError as exc:
+        # 装不下时的两级补救：先把被整行卡片挤下来的插图收进下一行的空栏，
+        # 收不拢才丢图（用户 m05920 / m05779）。只动插图，卡片与文字一个不丢。
+        page = _fit_after_overflow(result, layout, exc)
     result.page = page
     write_layout_atomic(page_spec_path(out_dir), dump_layout(page))
     rendered = render_layout(page, out_dir)

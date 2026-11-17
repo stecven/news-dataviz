@@ -1,7 +1,7 @@
 # CI 与可复现构建
 
-> 用户 m07216（PR-D）。这份文档说明**为什么**流水线长这样，以及**怎么在没有 CI 的
-> 机器上手工跑一遍**。
+> 用户 m07216（PR-D）建立，m07603 两项收尾决策（老样本入库、字体预检）后更新。
+> 这份文档说明**为什么**流水线长这样，以及**怎么在没有 CI 的机器上手工跑一遍**。
 
 ## 1. 它保护什么
 
@@ -25,7 +25,7 @@
 `out/demo/**` 的盘上字节。跳过本身是**给 fresh clone 的合理降级**，但把它原样搬进
 CI，就变成「关键判据没跑，流水线还是绿的」。
 
-所以 CI 要做的事只有两件：**先把产物造出来**，**再让缺产物变成红**。
+所以 CI 要做的事有三件：**先核对字体**、**把产物造出来**、**让缺产物变成红**。
 
 ## 2. 严格模式：`REQUIRE_ARTIFACTS=1`
 
@@ -47,29 +47,25 @@ CI 全程设 `REQUIRE_ARTIFACTS=1`。它把"缺产物"从 `skip` 改成 `fail`�
 fresh clone 依然能"全绿但跳过依赖产物的组"，这是有意的开发体验。严格模式让 CI
 不可能在这种状态下报绿。
 
-CI 还会在跑完测试后**复查日志**，而且不是"零跳过"这种口号式检查 —— 是**白名单**：
+CI 还会在跑完测试后**复查日志**：**Python 与 JS 都必须零跳过**。
 
-> 有两个名字很像的东西，必须分清：
+> 用户 m07603 决策一之后，这里不再有白名单。原先的三个「老样本回读」用例
+> （`tests/test_step10` / `test_step17` / `test_step22`）读的是
+> `out/loop1/pagespec.json` —— 那是一个**旧版引擎**留下的 27 元素温度计规格，
+> 当前代码产不出来（`python -m loop.build_loop` 给的是 39 个元素），文件又在
+> `.gitignore` 的 `out/` 下，干净检出上必然跳过。
 >
-> * `out/demo/**` —— **可以由当前代码造出来**，所以严格模式下缺了就是红。
-> * `out/loop1/pagespec.json` —— **当前代码造不出同形状的文件**。它被三个用例当作
->   "旧版本遗留样本"读（断言 27 个元素），而现在 `python -m loop.build_loop` 跑出来
->   是 39 个元素。它在 `.gitignore` 里，干净机上根本不存在，CI 也**无法**提供一个。
+> 现在的做法是把那份老样本**收进仓库当夹具**：`tests/fixtures/legacy/loop1_pagespec.json`
+> （同族真实遗留产物，27 元素 / `thermometer` / 10×6，JSON 内容与字段结构一字未改，
+> 只按 `.gitattributes` 的 `eol=lf` 归一了行尾）。三个用例改成读它，于是它们在
+> **没有 `out/` 的干净检出上也真跑**，跳过白名单随之删除。
 >
-> 所以这三个用例保留原来的 `skipTest`，**不让**它们走 `skip_or_fail` ——
-> 强行严格化只会得到一个和本任务无关的假红。
+> 注意区分两件事：
+>
+> * `out/demo/**` —— 由当前代码造得出来，严格模式下缺了就红；
+> * `tests/fixtures/**` —— 入库夹具，与 `out/` 无关，clean checkout 上一定在。
 
-CI 的做法是把允许的跳过**钉死并点名**：
-
-| 用例 | 文件 | 为什么允许跳过 |
-| --- | --- | --- |
-| `test_legacy_loop1_pagespec_still_readable_and_renderable` | `tests/test_step10_semicircle_acceptance.py` | 需要老样本 |
-| `test_old_loop1_pagespec_still_renders` | `tests/test_step17_image_element.py` | 需要老样本 |
-| `test_legacy_pagespec_still_reads_and_renders` | `tests/test_step22_target_box.py` | 需要老样本 |
-
-流水线要求跳过集合**恰好等于**这 3 个（数量 + 名字都对）。任何**新增**跳过都会被
-判失败 —— 这才是"没有静默跳过"的可执行含义：不是不许跳，而是**跳了必须是被点名过
-的**。JS 侧没有这种历史包袱，所以仍然是零跳过。
+任何跳过都会被判失败 —— 这是"没有静默跳过"的可执行含义。
 
 ## 3. 字体：为什么它算构建依赖
 
@@ -91,21 +87,41 @@ CI 的做法是把允许的跳过**钉死并点名**：
   否则回落到 `C:/Windows/Fonts/msyh.ttc`（生成现有基线的微软雅黑）。
 - **找不到就抛 `FontUnavailable`**，不兜底。三处写死的路径全部改为
   `fonts.load_font(size)`。
-- CI 的第一步打印字体路径与它的 sha256，日志里能查"这次用的是什么字体"。
+- CI 在跑任何构建之前调用 `fonts.check_baseline_font()`：**用钉住版本的 Pillow
+  真的打开一次**，并把文件的 SHA-256 与基线摘要比对。这一步不过是红。
 
 ### 几何基线用的是哪个字体
 
-`C:/Windows/Fonts/msyh.ttc`（微软雅黑）— **随 Windows 分发，不可再分发**，因此
-不能入库、也不能塞进 `requirements.txt`。CI 里按下面的顺序拿：
+`C:/Windows/Fonts/msyh.ttc`（微软雅黑），SHA-256：
 
-1. runner 自带 `C:\Windows\Fonts\msyh.ttc`（Windows runner 直接用）；
-2. 否则读仓库 secret `NEWSDATAVIZ_FONT_B64`（该字体文件的 base64），写到
-   `$RUNNER_TEMP` 再设 `NEWSDATAVIZ_FONT_PATH` 指过去；
-3. 两者都没有 → **CI 明确失败**，错误信息指向这份文档。
+```
+d79c55e68b1131eea0cc1c47be4f572d964f28c682e143db2ad09c1e4cb07a3f
+```
 
-> 想让 CI 更省事，仓库管理员可以把 `msyh.ttc` 做成 base64 存进
-> Settings → Secrets → Actions，名字叫 `NEWSDATAVIZ_FONT_B64`。
-> 这是"把私有环境里的字体喂给私有 runner"，不是把字体内库。
+这个摘要钉在 `loop/fonts.py::BASELINE_FONT_SHA256` 里；`fonts.check_baseline_font()`
+拿它当判据。
+
+**用户 m07603 决策二：不搬运这个字体。** 它随 Windows 分发、**不可再分发**，所以：
+
+- 不复制进仓库；
+- 不通过 `NEWSDATAVIZ_FONT_B64` 之类的 base64 secret 送到 GitHub Runner；
+- `check_baseline_font()` 失败时**不静默回退**到 `ImageFont.load_default()`。
+
+CI 因此把 `runs-on` 定在 **`windows-2025`**，并**实测**该 runner 上的
+`C:\Windows\Fonts\msyh.ttc` 是否就是基线那一份：
+
+1. 文件不存在 → 红（错误信息说明两条出路）；
+2. Pillow 载不动 → 红；
+3. SHA-256 与 `BASELINE_FONT_SHA256` 不一致 → 红，**并且不继续跑六个 demo**。
+
+> ⚠️ 已实际验证的是：本机（Windows 11，Python 3.14.5 + Pillow 13.0.0）上
+> `check_baseline_font()` 通过。**「GitHub 的 `windows-2025` 镜像里那份 msyh.ttc
+> 是否与基线逐字节一致」尚未得到实际运行验证** —— 官方 runner 镜像的字体清单不能
+> 当作实测结果。所以第一次真正跑 CI 时，这一步就是判据本身：
+> 过不过以日志里的 sha256 为准。
+>
+> 若它不过：**不要**换字体、**不要**重冻 `legacy_fingerprints.json`、**不要**用
+> secret 绕过授权，而是配置一台具备微软雅黑合法使用权的**自托管 Windows runner**。
 
 **换成可再分发的开源字体是另一回事**：那会改变折行与几何，必须作为一次独立的契约
 变更去做（重新生成 11 份产物 + 重冻指纹基线 + 重测 V2 像素口径）。本阶段不做，
@@ -127,16 +143,19 @@ checkout
   → setup-node 24（cache: npm，路径指向 frontend/package-lock.json）
   → pip install -r requirements.txt
   → npm ci（工作目录 frontend）
-  → 准备字体（见 §3；打印路径 + sha256）
+  → 核对字体与几何基线一致（见 §3：存在 + Pillow 实载 + SHA-256 比对）
+  → 打印生效的字体路径
   → 六个 demo 脚本                      # out/demo/**/pagelayout.json + preview.png + _cards/
   → 检查 11 份 pagelayout.json 真的落盘
   → python -m unittest discover -s tests -t . -v
   → npm test（工作目录 frontend）
-  → 复查两份日志：Python 跳过集合 == 3 个白名单用例；JS 零跳过
+  → 复查两份日志：Python 零跳过；JS 零跳过
 ```
 
-**这里故意不跑 `python -m loop.build_loop`** —— 见 §2 的说明：它产出的不是那三个
-用例想要的老样本，跑了只会把"老样本回读"变成假红。
+`runs-on: windows-2025`。
+
+**这里故意不跑 `python -m loop.build_loop`** —— 它产出的不是那三个用例要的老样本
+（那三个用例现在读入库夹具），跑了没有意义。
 
 六个写 `out/demo/**/pagelayout.json` 的脚本（顺序无关，证明产出关系的是「都在测试
 之前」）:
@@ -165,6 +184,9 @@ $env:NEWSDATAVIZ_FONT_PATH = "C:/Windows/Fonts/msyh.ttc"   # 或让默认值生�
 python -m pip install -r requirements.txt
 cd frontend; npm ci; cd ..
 
+# 字体身份先过 —— 不过就别往下跑（否则会造出另一套几何）
+python -c "from loop import fonts; print(fonts.check_baseline_font())"
+
 python -m scripts.build_auto_layout_demo
 python -m scripts.build_illustrated_demo
 python -m scripts.build_multicol_demo
@@ -181,16 +203,17 @@ cd frontend; npm test
 
 ## 7. 已知边界
 
-- **三个"老样本回读"用例在 CI 上仍然是跳过**（白名单见 §2）。它们要的
-  `out/loop1/pagespec.json`（27 个元素）是旧版本引擎留下的产物，当前代码产不出来
-  （现在是 39 个元素），也没有入库。**这是个真缺口，不是"已经解决"**：
-  两个可选出路，需要人工决定 ——
-  ① 把那个老样本作为夹具入库（`tests/fixtures/legacy/…`），让用例改成读夹具，
-  于是它变成可复现的判据；② 认定这两个格式的回读已无价值，正式退役这三个用例
-  （退役要写进计划，不是悄悄删）。**本轮不擅自选**：库里的老样本已经不可复现，
-  而"补一个我手工造的同形状文件"会把判据变成自说自话。
-- **runner 必须是能提供该字体的平台**（自带 `msyh.ttc` 的 Windows，或配了
-  `NEWSDATAVIZ_FONT_B64` 的任意平台）。JIT runner 上没字体就是红，不会静默降级。
+- **老样本回读已解决**（用户 m07603 决策一）：27 元素样本入库为
+  `tests/fixtures/legacy/loop1_pagespec.json`，三个用例读它、不再依赖 `out/`，
+  于是干净检出上它们也真跑。CI 因此要求**零跳过**。
+  > 口径说明：入库的那份是**同族真实遗留产物**（2026-11-08 的 `out/demo/g1`，
+  > 同样 27 元素 / `thermometer` / 10×6），因为原始的 `out/loop1/pagespec.json`
+  > 从未入库、已不可恢复。JSON 内容与字段结构一字未改，只按 `.gitattributes`
+  > 的 `eol=lf` 归一了行尾。判据（27 元素 + 可反序列化 + 可真渲染）与原来完全一致。
+- **runner 必须能提供与基线一致的字体**：`runs-on: windows-2025` +
+  `fonts.check_baseline_font()`。**该 runner 镜像里的雅黑是否与基线一致，本阶段
+  未得到实际运行验证**（本地 Windows 上已验证通过）；不一致就是红，不会静默降级。
+  真不一致时的出路是自托管 Windows runner，不是换字体或重冻基线。
 - `git ls-remote` 在本机因 `core.sshCommand` 的 Windows 反斜杠路径被 Git-Bash
   吃掉而不可用；推送要用 `git -c core.sshCommand=<正斜杠路径> push`。这与 CI 无关
   （Actions 自己管凭据），但会把"本地看远端"搞坏，容易误判。

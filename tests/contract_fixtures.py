@@ -34,6 +34,19 @@ BASELINE_PATH: str = os.path.join(REPO_ROOT, "tests", "fixtures", "contract",
 #: 演示稿产物根目录（``out/`` 不入库，fresh clone 上不存在）。
 DEMO_ROOT: str = os.path.join(REPO_ROOT, "out", "demo")
 
+#: 旧版 ``out/loop1/pagespec.json`` 的入库替代（用户 m07603 决策一）。
+#:
+#: 原来读它的三个用例（``test_step10`` / ``test_step17`` / ``test_step22`` 的
+#: 「老样本回读」）都靠一个只存在于开发机 ``out/`` 里的 27 元素温度计规格，
+#: 干净检出上必然跳过 —— 这正是「绿不等于跑过」的一种。
+#:
+#: 那份原始文件不在版本库里、也已不可恢复；现在这份是**同一族**的真实遗留产物
+#: （同为 ``heat_ratio_top5`` 温度计、27 个元素、整版 10×6，mtime 2026-11-08，
+#: 早于仓库首次提交），JSON 内容与字段结构一字未改，只按 ``.gitattributes``
+#: 的 ``eol=lf`` 归一了行尾。三个用例改成直接读它，于是不依赖 ``out/``。
+LEGACY_LOOP1_PAGESPEC: str = os.path.join(
+    REPO_ROOT, "tests", "fixtures", "legacy", "loop1_pagespec.json")
+
 #: 严格模式开关（用户 m07216 任务 2）：``REQUIRE_ARTIFACTS=1`` 时，缺产物**失败**。
 REQUIRE_ARTIFACTS_ENV: str = "REQUIRE_ARTIFACTS"
 

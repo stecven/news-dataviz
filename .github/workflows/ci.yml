@@ -1,12 +1,13 @@
 name: CI
 
-# 用户 m07216（PR-D）。这份流水线只为一件事存在：
+# 用户 m07216（PR-D）+ m07603（两项收尾决策）。这份流水线只为一件事存在：
 # 把「关键判据被静默跳过，流水线却报绿」变成不可能。
 #
-# 它做两件事：
-#   1. 先把测试要读的产物造出来（六个 demo 脚本 → out/demo/**）；
-#   2. 全程 REQUIRE_ARTIFACTS=1，让"缺产物"在 out/demo 这一族上从 skip 变成 fail；
-#      并在跑完测试后复查日志：除了三个「老样本回读」用例的白名单，不许有任何跳过。
+# 它做四件事：
+#   1. 先核对字体身份（SHA-256 对齐几何基线），拿不到就红 —— 换字体会换几何；
+#   2. 把测试要读的产物造出来（六个 demo 脚本 → out/demo/**）；
+#   3. 全程 REQUIRE_ARTIFACTS=1，让"缺产物"从 skip 变成 fail；
+#   4. 跑完测试后复查日志：Python 与 JS 都**一次跳过都不许有**。
 #
 # 任何一步失败即整个 job 失败 —— 全文没有 continue-on-error，也没有 `|| true`。
 
@@ -25,10 +26,11 @@ env:
 jobs:
   test:
     name: Python + JavaScript（严格产物模式）
-    # 几何基线是用微软雅黑（C:\Windows\Fonts\msyh.ttc）生成的。选 Windows
-    # runner 是为了让这条默认路径尽量直接可用；拿不到字体的平台见下一步
-    # 《准备字体》的兜底与失败分支。
-    runs-on: windows-latest
+    # 几何基线是用微软雅黑（C:\Windows\Fonts\msyh.ttc）生成的。
+    # 用户 m07603 决策二：定在 windows-2025，并在下一步**实际核对**该 runner 的
+    # msyh.ttc 是否与基线逐字节一致；不一致就明确失败，不换字体、不重冻基线、
+    # 也不用 base64 secret 绕过分发授权（该字体不可再分发）。
+    runs-on: windows-2025
 
     steps:
       - name: 检出代码
@@ -62,41 +64,40 @@ jobs:
 
       # 字体是**构建依赖**，不是锦上添花：折行用 font.getlength() 量字宽，
       # 换字体就是换几何（卡片框、行高、11 份基线指纹全变）。
-      # 拿不到"和基线一致的那个字体"时，这一步必须红，不允许静默用默认字体。
-      - name: 准备字体
+      #
+      # 用户 m07603 决策二：不把 msyh.ttc 入库、不用 base64 secret 搬运它（该字体
+      # 随 Windows 分发、不可再分发）；改为**核对 runner 自带的这一份**。核对三项：
+      # 文件存在 / Pillow 能真的打开 / SHA-256 等于几何基线所用的那份。
+      # 任一不过就红，且**不继续**后面的 demo 构建 —— 否则就会"顺手把 golden 重冻
+      # 成另一套几何"。runner 镜像里到底有没有匹配版本的雅黑，只能靠这里实测。
+      - name: 核对字体与几何基线一致
         shell: pwsh
-        env:
-          # 可选：把 msyh.ttc 做 base64 存进仓库 secret。
-          # 该字体随 Windows 分发、不可再分发，所以不入库。
-          FONT_B64: ${{ secrets.NEWSDATAVIZ_FONT_B64 }}
         run: |
           $default = 'C:\Windows\Fonts\msyh.ttc'
-          $resolved = $null
-
-          if (Test-Path $default) {
-            Write-Host "runner 自带字体：$default"
-            $resolved = $default
-          } elseif ($env:FONT_B64) {
-            $dest = Join-Path $env:RUNNER_TEMP 'msyh.ttc'
-            [IO.File]::WriteAllBytes($dest, [Convert]::FromBase64String($env:FONT_B64))
-            Write-Host "已从 secret NEWSDATAVIZ_FONT_B64 还原字体到 $dest"
-            $resolved = $dest
-            "NEWSDATAVIZ_FONT_PATH=$dest" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          } else {
+          if (-not (Test-Path -LiteralPath $default)) {
             # 不用 here-string：PowerShell 的 `"@` 必须顶格，而顶格会提前结束
             # YAML 的 block scalar。用拼接的普通字符串最稳。
-            $msg = "无法获得几何基线所用的字体（msyh.ttc）。" +
-                   "`n  * 便捷做法：把 $default 的 base64 存进仓库 secret 'NEWSDATAVIZ_FONT_B64'；" +
-                   "`n  * 或者换一台自带该字体的 runner。" +
-                   "`n不允许静默改用 ImageFont.load_default()：那会算出另一套折行，" +
-                   "几何指纹会假红（或者被人错误地重冻一遍）。详见 docs/ci.md。"
+            $msg = "runner 上没有几何基线所用的字体：$default" +
+                   "`n不允许静默改用 ImageFont.load_default()，也不允许换字体或重冻基线：" +
+                   "`n  * 请配置一台具备微软雅黑合法使用权的自托管 Windows runner；" +
+                   "`n  * 或者把字体放到某个路径并用 NEWSDATAVIZ_FONT_PATH 指过去（该文件必须与基线 sha256 一致）。" +
+                   "`n详见 docs/ci.md。"
             throw $msg
           }
-
-          $len = (Get-Item -LiteralPath $resolved).Length
-          $sha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLower()
+          $len = (Get-Item -LiteralPath $default).Length
+          $sha = (Get-FileHash -LiteralPath $default -Algorithm SHA256).Hash.ToLower()
+          Write-Host "字体路径 = $default"
           Write-Host "字体长度 = $len 字节"
           Write-Host "字体 sha256 = $sha"
+
+          # 用**钉住版本的 Pillow** 实际加载一次 + 与基线摘要比对。
+          # check_baseline_font() 同时负责"载不动"与"摘要不一致"两种失败。
+          $env:PYTHONPATH = $env:GITHUB_WORKSPACE
+          python -c "from loop import fonts; p, h = fonts.check_baseline_font(); print('check_baseline_font OK:', p, h)"
+          if ($LASTEXITCODE -ne 0) {
+            throw "字体与几何基线不一致（见上面的 FontUnavailable 报文）。已中止，未运行任何 demo 构建。"
+          }
+          Write-Host "字体已与几何基线逐字节核对通过。"
 
       - name: 打印生效的字体路径
         run: python -c "from loop import fonts; print('font_path =', fonts.font_path()); print('from_env =', fonts.loaded_from_env())"
@@ -104,10 +105,10 @@ jobs:
       # ---- 先造产物，再跑测试。顺序是这份流水线的全部意义所在。 ----
       #
       # 注意：这里**不**跑 `python -m loop.build_loop`。它写的 out/loop1/pagespec.json
-      # 被三个用例当作**老样本**读（断言 27 个元素），而当前引擎跑出来的是 39 个元素；
-      # 也就是说那个文件是「旧版本留下的样本」，当前代码已经产不出来了。让 CI 去造它
-      # 只会得到一个假红。那三个用例属于「老样本回读」，在干净机上没有样本可读 ——
-      # 详见 docs/ci.md §2 的跳过白名单。
+      # 是「旧版本留下的样本」（当前引擎跑出来的是 39 个元素，那三个用例断言的是 27），
+      # 而用户 m07603 决策一已经把那份 27 元素样本收进仓库夹具
+      # （tests/fixtures/legacy/loop1_pagespec.json），三个用例不再读 out/loop1/。
+      # 所以 CI 既不需要、也不应该去造它。
 
       - name: 构建演示产物（六个脚本 → out/demo/**）
         run: |
@@ -153,26 +154,15 @@ jobs:
           Get-Content py-tests.log -Tail 40
           if ($code -ne 0) { throw "Python 测试失败（exit $code）" }
 
-          # 跳过白名单：只有依赖「旧版本遗留样本」的三个用例可以跳。
-          # 那个样本 out/loop1/pagespec.json 是 gitignore 的，干净机上不存在，
-          # 当前引擎又产不出同形状的文件 —— CI 无法提供它。
-          # 白名单之外**任何**跳过都判失败：这才是「没有静默跳过」的含义。
-          $allowed = @(
-            'test_legacy_loop1_pagespec_still_readable_and_renderable',
-            'test_old_loop1_pagespec_still_renders',
-            'test_legacy_pagespec_still_reads_and_renders'
-          )
+          # 用户 m07603 决策一之后，跳过白名单**已经删掉**：三个「老样本回读」
+          # 用例改成读入库夹具 tests/fixtures/legacy/loop1_pagespec.json，不再依赖
+          # out/loop1/。所以这里要求的是零跳过 —— 少一条判据就不算跑过。
           $skips = @(Select-String -Path py-tests.log -Pattern '\.\.\. skipped')
-          if ($skips.Count -ne $allowed.Count) {
+          if ($skips.Count -ne 0) {
             $names = ($skips | ForEach-Object { $_.Line.Trim() }) -join "`n  "
-            throw "Python 跳过数 $($skips.Count) ≠ 白名单 $($allowed.Count)。`n实际跳过：`n  $names"
+            throw "Python 有 $($skips.Count) 条用例被跳过，严格模式下不允许：`n  $names"
           }
-          foreach ($name in $allowed) {
-            if (-not ($skips | Where-Object { $_.Line -like "*$name*" })) {
-              throw "白名单里的 $name 没有出现在跳过列表里；跳过集合变了，请人工确认。"
-            }
-          }
-          Write-Host "Python：除白名单里的 3 个老样本用例，无任何跳过。"
+          Write-Host "Python：全部执行，零跳过。"
 
       - name: JavaScript 全量测试（严格模式）
         shell: pwsh

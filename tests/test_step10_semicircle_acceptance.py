@@ -22,6 +22,7 @@ from loop.scaffold import build_pagespec
 from loop.solve import SolveError, validate_spec
 from loop.templates import get_template
 
+from tests import contract_fixtures as cf
 from tests.scratch import mkdtemp
 
 SEMI = get_template("semicircle")
@@ -286,6 +287,9 @@ class TestReadbackAndLegacy(unittest.TestCase):
         # （球顶 = 0 点）拒绝是预期的（E.4 L2：历史 spec 不保证通过最新校验）。
         # 用户要求的是「可读可渲染」，故这里只断言反序列化 + 真渲染，不改产物、
         # 不改校验器去迁就老数据。
+        #
+        # 用户 m07603 决策一：样本改成读入库夹具（``cf.LEGACY_LOOP1_PAGESPEC``），
+        # 不再看 ``out/``，于是干净检出上这条也会真跑而不是跳过。
         import json
         import os
 
@@ -293,10 +297,7 @@ class TestReadbackAndLegacy(unittest.TestCase):
         from loop.render import render_pptx
         from loop.verify import read_shapes
 
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        path = os.path.join(root, "out", "loop1", "pagespec.json")
-        if not os.path.exists(path):
-            self.skipTest("out/loop1 未生成")
+        path = cf.LEGACY_LOOP1_PAGESPEC
         with open(path, encoding="utf-8") as f:
             doc = json.load(f)
         spec = PageSpec.from_dict(doc)

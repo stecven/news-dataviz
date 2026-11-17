@@ -1,0 +1,500 @@
+{
+  "width_in": 10.0,
+  "height_in": 6.0,
+  "chart_key": "heat_ratio_top5",
+  "chart_title": "取暖电器细分品类成交额环比增速TOP5",
+  "scale": {
+    "v_max": 14.0,
+    "h_in": 3.0,
+    "unit": "倍(超)",
+    "factor": 0.21428571428571427,
+    "domain": [
+      0.0,
+      14.0
+    ]
+  },
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "x_in": 0.5,
+      "y_in": 0.5,
+      "w_in": 9.0,
+      "h_in": 0.5,
+      "fill": null,
+      "text": "取暖电器细分品类成交额环比增速TOP5",
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "scale_note",
+      "type": "text",
+      "role": "scale_note",
+      "x_in": 0.5,
+      "y_in": 1.15,
+      "w_in": 9.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "量程上限 V_max=14倍(超)｜液柱高度 = 3.0 × 数值 / V_max",
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "track_1",
+      "type": "rect",
+      "role": "track",
+      "x_in": 0.5,
+      "y_in": 1.65,
+      "w_in": 0.5,
+      "h_in": 3.0,
+      "fill": "F1F1F1",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "liquid_1",
+      "type": "rect",
+      "role": "liquid",
+      "x_in": 0.5,
+      "y_in": 2.078571428571429,
+      "w_in": 0.5,
+      "h_in": 2.571428571428571,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 1,
+        "value": 12.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": "h_in = scale.factor * binding.value",
+      "geometry": null
+    },
+    {
+      "id": "bulb_1",
+      "type": "ellipse",
+      "role": "bulb",
+      "x_in": 0.4,
+      "y_in": 4.300000000000001,
+      "w_in": 0.7,
+      "h_in": 0.7,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "label_1",
+      "type": "text",
+      "role": "label",
+      "x_in": 0.25,
+      "y_in": 5.1000000000000005,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "欧式快热炉",
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "value_1",
+      "type": "text",
+      "role": "value",
+      "x_in": 0.25,
+      "y_in": 5.45,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "12倍",
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 1,
+        "value": 12.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "track_2",
+      "type": "rect",
+      "role": "track",
+      "x_in": 2.625,
+      "y_in": 1.65,
+      "w_in": 0.5,
+      "h_in": 3.0,
+      "fill": "F1F1F1",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "liquid_2",
+      "type": "rect",
+      "role": "liquid",
+      "x_in": 2.625,
+      "y_in": 2.935714285714286,
+      "w_in": 0.5,
+      "h_in": 1.7142857142857142,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 2,
+        "value": 8.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": "h_in = scale.factor * binding.value",
+      "geometry": null
+    },
+    {
+      "id": "bulb_2",
+      "type": "ellipse",
+      "role": "bulb",
+      "x_in": 2.525,
+      "y_in": 4.300000000000001,
+      "w_in": 0.7,
+      "h_in": 0.7,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "label_2",
+      "type": "text",
+      "role": "label",
+      "x_in": 2.375,
+      "y_in": 5.1000000000000005,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "电油汀",
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "value_2",
+      "type": "text",
+      "role": "value",
+      "x_in": 2.375,
+      "y_in": 5.45,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "8倍",
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 2,
+        "value": 8.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "track_3",
+      "type": "rect",
+      "role": "track",
+      "x_in": 4.75,
+      "y_in": 1.65,
+      "w_in": 0.5,
+      "h_in": 3.0,
+      "fill": "F1F1F1",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "liquid_3",
+      "type": "rect",
+      "role": "liquid",
+      "x_in": 4.75,
+      "y_in": 3.792857142857143,
+      "w_in": 0.5,
+      "h_in": 0.8571428571428571,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 3,
+        "value": 4.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": "h_in = scale.factor * binding.value",
+      "geometry": null
+    },
+    {
+      "id": "bulb_3",
+      "type": "ellipse",
+      "role": "bulb",
+      "x_in": 4.65,
+      "y_in": 4.300000000000001,
+      "w_in": 0.7,
+      "h_in": 0.7,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "label_3",
+      "type": "text",
+      "role": "label",
+      "x_in": 4.5,
+      "y_in": 5.1000000000000005,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "踢脚线取暖器",
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "value_3",
+      "type": "text",
+      "role": "value",
+      "x_in": 4.5,
+      "y_in": 5.45,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "4倍",
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 3,
+        "value": 4.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "track_4",
+      "type": "rect",
+      "role": "track",
+      "x_in": 6.875,
+      "y_in": 1.65,
+      "w_in": 0.5,
+      "h_in": 3.0,
+      "fill": "F1F1F1",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "liquid_4",
+      "type": "rect",
+      "role": "liquid",
+      "x_in": 6.875,
+      "y_in": 4.2214285714285715,
+      "w_in": 0.5,
+      "h_in": 0.42857142857142855,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 4,
+        "value": 2.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": "h_in = scale.factor * binding.value",
+      "geometry": null
+    },
+    {
+      "id": "bulb_4",
+      "type": "ellipse",
+      "role": "bulb",
+      "x_in": 6.775,
+      "y_in": 4.300000000000001,
+      "w_in": 0.7,
+      "h_in": 0.7,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "label_4",
+      "type": "text",
+      "role": "label",
+      "x_in": 6.625,
+      "y_in": 5.1000000000000005,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "取暖画",
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "value_4",
+      "type": "text",
+      "role": "value",
+      "x_in": 6.625,
+      "y_in": 5.45,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "2倍",
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 4,
+        "value": 2.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "track_5",
+      "type": "rect",
+      "role": "track",
+      "x_in": 9.0,
+      "y_in": 1.65,
+      "w_in": 0.5,
+      "h_in": 3.0,
+      "fill": "F1F1F1",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "liquid_5",
+      "type": "rect",
+      "role": "liquid",
+      "x_in": 9.0,
+      "y_in": 4.435714285714286,
+      "w_in": 0.5,
+      "h_in": 0.21428571428571427,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 5,
+        "value": 1.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": "h_in = scale.factor * binding.value",
+      "geometry": null
+    },
+    {
+      "id": "bulb_5",
+      "type": "ellipse",
+      "role": "bulb",
+      "x_in": 8.9,
+      "y_in": 4.300000000000001,
+      "w_in": 0.7,
+      "h_in": 0.7,
+      "fill": "C01F2A",
+      "text": null,
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "label_5",
+      "type": "text",
+      "role": "label",
+      "x_in": 8.75,
+      "y_in": 5.1000000000000005,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "电热地垫",
+      "binding": null,
+      "geometry_expr": null,
+      "geometry": null
+    },
+    {
+      "id": "value_5",
+      "type": "text",
+      "role": "value",
+      "x_in": 8.75,
+      "y_in": 5.45,
+      "w_in": 1.0,
+      "h_in": 0.3,
+      "fill": null,
+      "text": "1倍",
+      "binding": {
+        "chart_key": "heat_ratio_top5",
+        "seq": 5,
+        "value": 1.0,
+        "unit": "倍(超)"
+      },
+      "geometry_expr": null,
+      "geometry": null
+    }
+  ],
+  "semantic_tags": [],
+  "constraints": [
+    {
+      "id": "C1",
+      "kind": "bound",
+      "linear": true,
+      "expr": "0 <= x, x + w <= W, 0 <= y, y + h <= H",
+      "reuse_from_thermometer": false
+    },
+    {
+      "id": "DATA",
+      "kind": "data_link",
+      "linear": true,
+      "expr": "h_liquid = scale.factor * binding.value; theta = arc_total * v / sum(v)",
+      "reuse_from_thermometer": false
+    },
+    {
+      "id": "C3",
+      "kind": "shared_scale",
+      "linear": true,
+      "expr": "V_max = ceil(max(v) * 1.1) (preprocessed); sum(theta) = arc_total",
+      "reuse_from_thermometer": false
+    },
+    {
+      "id": "C4",
+      "kind": "vertical_adjacent",
+      "linear": true,
+      "expr": "y_liquid + h_liquid = y_track + H_track; y_bulb = y_track + H_track - bulb_d",
+      "reuse_from_thermometer": false
+    },
+    {
+      "id": "C5",
+      "kind": "center",
+      "linear": true,
+      "expr": "x_child + w_child / 2 = x_parent + w_parent / 2",
+      "reuse_from_thermometer": false
+    },
+    {
+      "id": "C6",
+      "kind": "equal_spacing",
+      "linear": true,
+      "expr": "x_{i+1} - x_i = d = max(gap_min, (W - 2*m - w_track)/(n-1))",
+      "reuse_from_thermometer": false
+    }
+  ],
+  "layout": {
+    "template": "thermometer",
+    "orient": "horizontal",
+    "margin": 0.5,
+    "gap_min": 0.5,
+    "top_reserve": 1.65,
+    "bottom_margin": 0.25,
+    "param_overrides": {}
+  }
+}

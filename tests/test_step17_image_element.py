@@ -226,9 +226,11 @@ class TestNoRegression(unittest.TestCase):
         self.assertEqual([e for e in doc["elements"] if e["type"] == "image"], [])
 
     def test_old_loop1_pagespec_still_renders(self):
-        old = os.path.join(ROOT, "out", "loop1", "pagespec.json")
-        if not os.path.exists(old):
-            self.skipTest("老产物不在工作区")
+        # 用户 m07603 决策一：样本改成读入库夹具，不再看 ``out/loop1/``，
+        # 于是干净检出上这条也会真跑而不是跳过。
+        import tests.contract_fixtures as cf
+
+        old = cf.LEGACY_LOOP1_PAGESPEC
         from loop.build_loop import render_from_spec
         with open(old, encoding="utf-8") as f:
             spec = PageSpec.from_dict(json.load(f))

@@ -187,6 +187,21 @@ function cardNodeOf(svg, cardName) {
 
 // ---------------------------------------------------------------------------
 // 实测基准（`out/demo/**` 现有 11 份，逐份核对过：节点公式 11/11 零偏差）
+//
+// ⚠ 对齐的是 **PR-B 时代的排版产物**（HEAD f6c3508）。相对 PR-A 的基准，只有三个键变过，
+// 每一处都逐份实测并核对过来源：
+//   cards.heat_age 23 → 24：PR-B 起卡片外框是等比缩放后的真实尺寸，illustrated /
+//     multicol / theme_match 的 heat_age 外框宽由格子宽 4.5in 缩到 3.165in，卡内
+//     `scale_note`（31 字）由 1 行折成 2 行 ⇒ text 节点 = 1 个 <g> + 2 行 = 3（原 2）。
+//     auto_layout（外框 4.94625in）与 page/paper 的 semi（4.4475in）仍 1 行，故不变。
+//   page 15 → 14（illustrated / illustrated/_no_asset / multicol）：heat_ratio_top5
+//     升到整行（8.2384in）后不再与插图并排，`illustration_17` 被放弃 ⇒ images 2 → 1。
+//     块公式不变（2+3+4+4=13），13 + 1 = 14。
+//   page 14 → 13（theme_match）：`illustration_17` 下移到与末块同排，该块由 span=2
+//     （2 个 <g>，各 1 行 → 4 节点）压成 span=1（1 个 <g>，2 行 → 3 节点）。
+//   total +1（illustrated/_spread 151→152、multicol/_spread 159→160）：只有 scale_note
+//     那一处 +1，page 未变（这两份没有可被放弃的并排插图）。
+// elements / checked / skipped / skipHist 11 份全部未变。
 // ---------------------------------------------------------------------------
 const GOLDEN_STRUCTURE = {
   auto_layout: {
@@ -199,27 +214,29 @@ const GOLDEN_STRUCTURE = {
     elements: 0, checked: 0, skipped: 0, skipHist: {},
   },
   illustrated: {
-    total: 154, page: 15, cards: { heat_ratio_top5: 116, heat_age: 23 },
+    // total 154 = cards(116+24) + page 14：heat_age +1 与 page −1 相抵
+    total: 154, page: 14, cards: { heat_ratio_top5: 116, heat_age: 24 },
     elements: 54, checked: 14, skipped: 40,
     skipHist: { text: 20, track: 5, outline: 5, ticks: 5, arc: 5 },
   },
   'illustrated/_no_asset': {
-    total: 154, page: 15, cards: { heat_ratio_top5: 116, heat_age: 23 },
+    total: 154, page: 14, cards: { heat_ratio_top5: 116, heat_age: 24 },
     elements: 54, checked: 14, skipped: 40,
     skipHist: { text: 20, track: 5, outline: 5, ticks: 5, arc: 5 },
   },
   'illustrated/_spread': {
-    total: 151, page: 12, cards: { heat_ratio_top5: 116, heat_age: 23 },
+    // page 不变（12），total +1 全在 heat_age 的 scale_note 多折一行
+    total: 152, page: 12, cards: { heat_ratio_top5: 116, heat_age: 24 },
     elements: 54, checked: 14, skipped: 40,
     skipHist: { text: 20, track: 5, outline: 5, ticks: 5, arc: 5 },
   },
   multicol: {
-    total: 154, page: 15, cards: { heat_ratio_top5: 116, heat_age: 23 },
+    total: 154, page: 14, cards: { heat_ratio_top5: 116, heat_age: 24 },
     elements: 54, checked: 14, skipped: 40,
     skipHist: { text: 20, track: 5, outline: 5, ticks: 5, arc: 5 },
   },
   'multicol/_spread': {
-    total: 159, page: 13, cards: { heat_ratio_top5: 116, heat_age: 23, placeholder: 7 },
+    total: 160, page: 13, cards: { heat_ratio_top5: 116, heat_age: 24, placeholder: 7 },
     elements: 59, checked: 17, skipped: 42,
     skipHist: { text: 22, track: 5, outline: 5, ticks: 5, arc: 5 },
   },
@@ -234,12 +251,14 @@ const GOLDEN_STRUCTURE = {
     skipHist: { text: 22, track: 5, outline: 5, ticks: 5, arc: 5 },
   },
   theme_match: {
-    total: 153, page: 14, cards: { heat_ratio_top5: 116, heat_age: 23 },
+    // total 153 = cards(116+24) + page 13：heat_age +1 与 page −1 相抵
+    total: 153, page: 13, cards: { heat_ratio_top5: 116, heat_age: 24 },
     elements: 54, checked: 14, skipped: 40,
     skipHist: { text: 20, track: 5, outline: 5, ticks: 5, arc: 5 },
   },
   'theme_match/_no_theme': {
     // 这份图纸的卡片名带 `_prov` 后缀（换主题后重生成过），与其它样本不同名。
+    // 它的唯一卡片是 heat_ratio_top5_prov（116），没有 heat_age，故不受影响。
     total: 123, page: 7, cards: { heat_ratio_top5_prov: 116 },
     elements: 39, checked: 12, skipped: 27,
     skipHist: { text: 12, track: 5, outline: 5, ticks: 5 }, // 该份没有 arc
@@ -724,24 +743,27 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V1 结构对拍（11 份 demo 图纸�
     const AUTO = goldenDoc('out/demo/auto_layout/pagelayout.json');
     const PLAIN = goldenDoc('out/demo/auto_layout/_plain/pagelayout.json');
 
-    it('Review Focus #4：卡1 frame 的 x 属性是 0（相对卡片），卡片自己是 40', () => {
+    it('Review Focus #4：卡1 frame 的 x 属性是 0（相对卡片），卡片自己是 100', () => {
       const svg = renderFree(AUTO);
       const card = AUTO.cards.find((one) => one.name === 'heat_ratio_top5');
-      expect(card.x_in).toBe(0.4);
+      // 卡片在格子里水平居中：格子 x=0.4、格子宽 6.072，画出来的真实外框 4.8656in
+      // ⇒ x_in = 0.4 + (6.072 - 4.8656) / 2 = 1.0032（PR-B 前卡片贴格子左边，所以是 0.4）。
+      expect(card.x_in).toBe(1.0032);
       const frameEl = card.spec.elements.find((el) => el.id === 'frame');
       expect(frameEl.x_in).toBe(0);
       const cardNode = cardNodeOf(svg, 'heat_ratio_top5');
-      expect(cardNode.getAttribute('x')).toBe('40');
+      expect(cardNode.getAttribute('x')).toBe('100'); // roundPx(1.0032) = pyRound(100.32) = 100
       const frame = collectByElId(svg).get(cardKey('heat_ratio_top5', 'frame'))[0];
       expect(frame.getAttribute('x')).toBe('0');
-      expect(boxOf([frame])).toEqual([0, 0, 607, 337]); // trunc 口径：不是 338
+      // 元素盒走 truncPx：trunc(4.8656*100) = 486、trunc(3.552267*100) = 355（不是 487/356）。
+      expect(boxOf([frame])).toEqual([0, 0, 486, 355]);
     });
 
     it('collectByElId 按卡片定域：卡1/卡2 的同名 id 不会并成一个 union bbox', () => {
       const svg = renderFree(AUTO);
       const byKey = collectByElId(svg);
-      // 裸 elId 会让卡1 的 frame(0,0,607,337) 与卡2 的 frame(0,0,607,496)
-      // 合并成 union [0,0,607,496] → 卡1 直接假 FAIL。
+      // 裸 elId 会让卡1 的 frame(0,0,486,355) 与卡2 的 frame(0,0,494,495)
+      // 合并成 union [0,0,494,495] → 卡1 直接假 FAIL。
       expect(byKey.has('frame')).toBe(false);
       expect(byKey.has('title')).toBe(false);
       expect(byKey.has('title_band')).toBe(false);
@@ -749,8 +771,8 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V1 结构对拍（11 份 demo 图纸�
 
       const frame1 = boxOf(byKey.get(cardKey('heat_ratio_top5', 'frame')));
       const frame2 = boxOf(byKey.get(cardKey('heat_age', 'frame')));
-      expect(frame1).toEqual([0, 0, 607, 337]);
-      expect(frame2).toEqual([0, 0, 607, 496]);
+      expect(frame1).toEqual([0, 0, 486, 355]);
+      expect(frame2).toEqual([0, 0, 494, 495]);
       expect(frame1).not.toEqual(frame2);
 
       // 页级块 / 插图不收在卡片里，键是裸 elId

@@ -3,13 +3,15 @@
  * P2 Task 6 / V2 像素对拍。
  *
  * 把 JS 渲染出来的 SVG 光栅化成 PNG，与 Python（Pillow）产出的金样本 PNG 逐像素比，
- * 证明**形状对得上**。三个口径（数字全部来自实测，不要改阈值）：
+ * 证明**形状对得上**。三个口径（数字对齐 PR-B / HEAD `f6c3508` 那批产物；全部实测，
+ * 不要改阈值。卡片尺寸就是这一代契约的「等比缩放后真实外框」——上一代是 607×337 /
+ * 607×496 / 356810，PR-B 之后必须重测，改动 `out/demo` 的几何同理）：
  *
  * | 口径 | 非文字像素 | exact | 1px 容差 |
  * |---|---|---|---|
- * | 卡1 `card_00_heat_ratio_top5.png` (607×337) | 129551 | 96.79% | 99.37% |
- * | 卡2 `card_01_heat_age.png` (607×496) | 226652 | 99.04% | 99.76% |
- * | 整页卡片区域（`preview.png` 1000×1500） | 356810 | 98.22% | 99.62% |
+ * | 卡1 `card_00_heat_ratio_top5.png` (486×355) | 127878 | 95.46% | 99.29% |
+ * | 卡2 `card_01_heat_age.png` (494×495) | 186132 | 98.43% | 99.45% |
+ * | 整页卡片区域（`preview.png` 1000×1500） | 315355 | 97.23% | 99.38% |
  *
  * **主判据是卡片级**（每张卡 1px 容差 ≥98%）；整页用「卡片区域内」那个口径。
  * 整页全画面口径只当诊断打印、不设判据 —— 那里面大头是插图位图重采样，差异无意义。
@@ -24,7 +26,9 @@
  *
  * 另外两条不依赖金样本的判据（`out/` 被 gitignore，fresh clone 上金样本不存在）：
  * - 「合成 doc」组：光栅化合成图纸，断言尺寸与背景色 —— 这条永远跑，防止整组静默全绿。
- * - `0.5` 平局用例：`pyRound` 的 half-to-even 与 `Math.round` 的分歧。
+ * - `0.5` 平局组：**自造合成 doc** 构造 `x.5` 平局，钉死 `pyRound` 的 half-to-even 与
+ *   `Math.round` 的分歧（元素落笔 + 卡片落位 + 逐像素账本），并在同一用例尾部把
+ *   「PR-B 之后真实样本里已无分歧平局」这一事实记在案。
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
@@ -752,25 +756,109 @@ describe.skipIf(!HAS_GOLDEN)('金样本：V2 像素对拍（11 份 demo 图纸�
 });
 
 // ---------------------------------------------------------------------------
-// 组 4：`0.5` 平局像素账本 —— 单独统计，不进上面的总体百分比
+// 组 4：`0.5` 平局的像素账本 —— 用**合成 doc 人为构造**平局（不依赖金样本）
+//
+// 为什么改成合成：PR-B（f6c3508）改了几何契约之后，11 份样本里 `x_in`/`y_in` 落在
+// `.5` 上、且 half-to-even 与 `Math.round` 分歧的坐标**一条都没有了** —— 实测 36 条
+// 平局全是 `heat_age/{center,sector_1..5}.x_in = 97.5`（pyRound 与 Math.round 同值 98）。
+// 旧样本里那条 `heat_age/{sector_1..5,legend_1..5}.y_in = 1.825`（分歧 182 / 183）随
+// 卡片等比缩放 + 居中留白一起消失了，所以这条判据不能再挂在真实样本上。
+//
+// 现在的做法：自己造 5 条纯色 sector + 5 条 legend，`y_in` 全落在 `x.5`，且**下取整是
+// 偶数**（12.5/62.5/112.5/162.5/212.5）⇒ pyRound = trunc = 地板、Math.round = 地板 + 1，
+// 两套口径必分歧 1px。像素账本用「同一张图纸的 half-to-even 版」对「Math.round 版」，
+// 逐条钉死差异的像素量级（5 条 × 60px = 300，全在形状边界那一行）。
+//
+// 账本为什么不再断言 `diffCount > 0`：同一个渲染器（librsvg）产出的两台图像只差 1px
+// 整数平移时，金样本每格颜色必定还在我方的 3×3 邻域里 ⇒ 1px 容差必然全额吸收
+// （实测 within1px = 900/900、diffCount = 0）。旧版金样本版能看到 diffCount > 0，靠的是
+// Pillow 与 librsvg 的抗锯齿差异，不是位移本身；那条依赖真实样本里的平局，已随几何消失。
+// 所以这里改记「分歧的代价 = 恰好 1px 且恰好落在容差内」，并用 11 个取样点把
+// 「差恰好 1px、高度没变」钉死（详见最后一条 it 里的取样注释）。
+//
+// 真实样本侧的现状不放任不管：同一个用例的最后一段会把「这批样本里没有分歧平局」
+// （36 条平局、分歧 0 条）记在案，免得下次有人以为这里漏测了。
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!HAS_GOLDEN)('金样本：0.5 平局的像素账本（单独统计）', () => {
-  it.skipIf(!FONT_PROBE.ok)(
-    'heat_age 的 y_in=1.825 平局带：差异全在边缘带、内部差为 0，且逐条打印',
-    async () => {
-      const sample = SAMPLES.find((item) => item.relPath.includes('auto_layout/pagelayout.json'));
-      const card = sample.doc.cards.find((item) => item.name === 'heat_age');
-      expect(card, 'auto_layout 里没有 heat_age 卡').toBeDefined();
-      expect(cardGoldenPath(sample, card, 1)).toContain('card_01_heat_age.png');
+/**
+ * 5 个 `y_in` 平局值：×100 得 12.5 / 62.5 / 112.5 / 162.5 / 212.5，全部 pyRound ≠ Math.round
+ * （下取整都是偶数 ⇒ half-to-even 取地板、Math.round 取地板 + 1）。
+ *
+ * 全部取 1/8 的整数倍（二进制精确可表示），避免 `1.425×100 = 142.4999…` 这类回程噪声；
+ * 相邻两条间距 0.5in = 50px > 形状高 30px，**不留相接**——否则上面那条的 1px 下移会把
+ * 下面那条的 1px 下移盖住，账本会少记一条（实测踩过：sector_3 与 sector_4 曾在 141/142
+ * 行相接，sector_4 的位移整条不可见）。
+ */
+const TIE_Y_IN = [0.125, 0.625, 1.125, 1.625, 2.125];
+/**
+ * 「Math.round 口径」的对照值 = 每个平局各 +1px，**刻意写成 `(地板 + 1.25)px`**。
+ *
+ * 不写成「把 y_in 加 0.01」（0.125 → 0.135）：那样能不能落到地板 + 1 那一行，取决于
+ * `(y + 0.01)×100` 的二进制回程是否还越过整数 —— 我给这组值做第一版时就踩过：
+ * `1.425 → 1.43` 时 `1.43×100 = 142.99999999999997`，`truncPx` 又掉回 142 行，
+ * 与 half-to-even 同值，5 条里只对得上 4 条。写成 `(地板 + 1.25)px` 之后只需要「地板值」
+ * 本身，与 `TIE_Y_IN` 的小数位完全脱钩。
+ *
+ * 语义上它仍然是「Math.round 口径在这处平局的唯一可能结果」：同一张图纸、同一个盒，
+ * 只是整体落到下面 1px 那一行。
+ */
+const TIE_Y_IN_ROUNDED = TIE_Y_IN.map(
+  (y) => (Math.trunc(y * PX_PER_IN) + 1.25) / PX_PER_IN,
+);
+/** 合成平局账本的实测值（写死；几何、渲染器或容差口径一变就会红，这正是我们要的）。 */
+const TIE_LEDGER = {
+  considered: 900,
+  exact: 600,
+  within1px: 900,
+  diffCount: 0,
+};
 
-      const { svg } = renderPage(null, sample.doc, { resolveAsset: resolveAssetFromRepo });
-      const cardNode = svg.querySelector('[data-card-name="heat_age"]');
-      const mine = await decodePng((await svgToPng(wrapCard(cardNode))).buffer);
-      const gold = await decodePng(readFileSync(goldenPath(cardGoldenPath(sample, card, 1))));
+/**
+ * 平局合成图纸：卡内元素换成 1 个 frame + 5 条 sector（实心矩形）+ 5 条 legend（文本）。
+ * `rounded = true` 时 y_in 取 `TIE_Y_IN_ROUNDED`（= 同一张图纸的 Math.round 口径）。
+ */
+function tieDoc(rounded) {
+  const doc = JSON.parse(JSON.stringify(SYNTH_DOC));
+  const card = doc.cards[0];
+  const frame = card.spec.elements.find((el) => el.id === 'frame');
+  const elements = [frame];
+  TIE_Y_IN.forEach((_, index) => {
+    const y = rounded ? TIE_Y_IN_ROUNDED[index] : TIE_Y_IN[index];
+    elements.push({
+      id: `sector_${index + 1}`,
+      type: 'rect',
+      role: 'title_band',
+      x_in: 0.2,
+      y_in: y,
+      w_in: 0.6,
+      h_in: 0.3,
+      fill: '1F4E79',
+    });
+    elements.push({
+      id: `legend_${index + 1}`,
+      type: 'text',
+      role: 'label',
+      x_in: 2.5,
+      y_in: y,
+      w_in: 1.2,
+      h_in: 0.2,
+      font_pt: 9,
+      lines: [`图例${index + 1}`],
+    });
+  });
+  card.spec.elements = elements;
+  return doc;
+}
 
-      const bands = tieBands({ cards: [card] });
-      expect(bands.length, 'heat_age 的平局元素数变了').toBeGreaterThan(0);
+describe('0.5 平局：合成 doc 人为构造的平局带（账本单独记）', () => {
+  // 一个 it 里装三连判据（元素落笔 / 卡片落位 / 像素账本）+ 一条金样本事实记账：
+  // 用例总数与 PR-B 之前持平（既不新增用例、更不删用例），判据强度只增不减。
+  // 三段各自用一对花括号圈出作用域，免得同名局部变量互相撞车。
+  it('合成平局三连 + 样本事实：元素落笔取偶数侧、卡片落位走 pyRound、1px 位移账本、样本无分歧平局', async () => {
+    // ── (1) 元素级：10 条平局全部 pyRound ≠ Math.round，落笔取偶数侧 ──
+    {
+      const doc = tieDoc(false);
+      const bands = tieBands(doc);
       for (const entry of bands) {
         console.log(
           `  ${entry.id}.${entry.axis} = ${entry.px}px`
@@ -778,33 +866,136 @@ describe.skipIf(!HAS_GOLDEN)('金样本：0.5 平局的像素账本（单独统�
           + `（${entry.pyRound === entry.mathRound ? '同值，不分歧' : '分歧 1px'}）`,
         );
       }
-      // 五条 sector + 五条 legend 都在 y_in=1.825 → 10 条平局
       expect(bands).toHaveLength(10);
-      expect(bands.filter((entry) => entry.pyRound !== entry.mathRound).length).toBe(10);
+      expect(bands.every((entry) => entry.axis === 'y_in')).toBe(true);
+      // 10 条全部真分歧：Math.round 一律给地板 + 1，half-to-even 给地板（下取整为偶数）。
+      expect(bands.filter((entry) => entry.pyRound !== entry.mathRound)).toHaveLength(10);
+      expect(bands.map((entry) => entry.pyRound)).toEqual(
+        bands.map((entry) => Math.trunc(entry.px)),
+      );
 
-      const textBoxes = textMaskBoxes((card.spec && card.spec.elements) || [], {
-        width: gold.width,
-        height: gold.height,
+      // 落笔坐实：元素盒走 trunc，在这批「下取整为偶数」的平局处 trunc === pyRound，
+      // 与 Math.round 差 1px ⇒ 渲染出的 y 必须等于 pyRound，不是 Math.round。
+      const { svg } = renderPage(null, doc);
+      const cardNode = svg.querySelector('[data-card-name="synth_card"]');
+      for (const entry of bands.filter((one) => one.id.startsWith('sector_'))) {
+        const node = cardNode.querySelector(`[data-el-id="${entry.id}"]`);
+        expect(node, `${entry.id} 没渲染出来`).not.toBeNull();
+        expect(Number(node.getAttribute('y'))).toBe(entry.pyRound);
+        expect(Number(node.getAttribute('y'))).not.toBe(entry.mathRound);
+      }
+    }
+
+    // ── (2) 卡片级：卡片落位那一处平局同样走 pyRound ──
+    {
+      const doc = tieDoc(false);
+      doc.cards[0].y_in = 1.825;
+      expect(1.825 * PX_PER_IN).toBe(182.5); // 真平局，不是 182.4999…
+      const { svg } = renderPage(null, doc);
+      const cardNode = svg.querySelector('[data-card-name="synth_card"]');
+      expect(cardNode.getAttribute('y')).toBe('182');
+      // 反向护栏：Math.round(182.5) = 183，两套口径确实差 1px，判据不是恒真；
+      // 同一张图纸把卡片 y_in 换成 1.83（Math.round 口径）就落到 183。
+      expect(Math.round(1.825 * PX_PER_IN)).toBe(183);
+      const rounded = tieDoc(false);
+      rounded.cards[0].y_in = 1.83;
+      const roundedCard = renderPage(null, rounded).svg
+        .querySelector('[data-card-name="synth_card"]');
+      expect(roundedCard.getAttribute('y')).toBe('183');
+    }
+
+    // ── (3) 像素账本：1px 位移的差异全在形状边界那一行，内部差为 0 ──
+    {
+      const doc = tieDoc(false);
+      const rounded = tieDoc(true);
+      const cardNode = renderPage(null, doc).svg.querySelector('[data-card-name="synth_card"]');
+      const roundedNode = renderPage(null, rounded).svg
+        .querySelector('[data-card-name="synth_card"]');
+      const mine = await decodePng((await svgToPng(wrapCard(cardNode))).buffer);
+      const wrong = await decodePng((await svgToPng(wrapCard(roundedNode))).buffer);
+      expect({ width: mine.width, height: mine.height }).toEqual({ ...SYNTH_CARD });
+      expect({ width: wrong.width, height: wrong.height }).toEqual({ ...SYNTH_CARD });
+
+      const FILL = rgbOf('1F4E79');
+      const WHITE = rgbOf('FFFFFF');
+      // 直接取样把「差的是真 1px、且只差一个平移」钉死。第 1 条 sector 的盒在
+      // half-to-even 版占 12..41 行（trunc(0.125×100) = 12，高 trunc(0.3×100) = 30），
+      // Math.round 版占 13..42 行。以下 11 个取样合起来排除了「差 2px」和「高度变了」：
+      //   11 行：两图都白（形状上边界之上）
+      //   12 行：我 = 填充、对照 = 白 ← 唯一的 1px 分歧
+      //   13 行：两图都填充（若差 2px，对照这里还会是白）
+      //   41 行：两图都填充；42 行：我 = 白、对照 = 填充（下边界同样平移 1px）
+      //   43 行：对照 = 白（高度仍是 30 行，没有被拉高）
+      expect(pixelAt(mine, 25, 11)).toEqual(WHITE);
+      expect(pixelAt(wrong, 25, 11)).toEqual(WHITE);
+      expect(pixelAt(mine, 25, 12)).toEqual(FILL);
+      expect(pixelAt(wrong, 25, 12)).toEqual(WHITE);
+      expect(pixelAt(mine, 25, 13)).toEqual(FILL);
+      expect(pixelAt(wrong, 25, 13)).toEqual(FILL);
+      expect(pixelAt(mine, 25, 41)).toEqual(FILL);
+      expect(pixelAt(wrong, 25, 41)).toEqual(FILL);
+      expect(pixelAt(mine, 25, 42)).toEqual(WHITE);
+      expect(pixelAt(wrong, 25, 42)).toEqual(FILL);
+      expect(pixelAt(wrong, 25, 43)).toEqual(WHITE);
+
+      const elements = doc.cards[0].spec.elements;
+      const bands = tieBands(doc);
+      // 账本口径与旧版一致：只看平局带内、文字掩膜之外的像素。
+      // 5 条 sector × 3 行 × 60px 宽 = 900；5 条 legend 的 1800px 全被文字掩膜盖掉
+      // （legend 的 y_in 同样平移 1px，但字形基线差异本来就不进判据，故掩膜）。
+      const ledger = await comparePixels(wrong, mine, {
+        width: mine.width,
+        height: mine.height,
+        boxes: textMaskBoxes(elements, { width: mine.width, height: mine.height })
+          .concat(complementBoxes(mine.width, mine.height, bands.map((entry) => entry.band))),
       });
-      // 账本口径：只看平局带内、文字掩膜之外的像素。
-      const ledger = await comparePixels(gold, mine, {
-        width: gold.width,
-        height: gold.height,
-        boxes: textBoxes.concat(complementBoxes(
-          gold.width,
-          gold.height,
-          bands.map((entry) => entry.band),
-        )),
-      });
-      console.log(`  [平局账本] ${fmt(ledger)}`);
-      expect(ledger.considered, '平局带里一个像素都没统计到，说明带算错了').toBeGreaterThan(0);
-      // 实测 190 个差异，190 落在金样本 4 邻域边缘带、0 个内部差 —— 也就是
-      // 「half-to-even 的 1px 位移全部落在描边上」，与组 3 的总体账互不影响。
-      expect(ledger.diffCount).toBeGreaterThan(0);
+      console.log(`  [合成平局账本] ${fmt(ledger)}`);
+      expect(ledger.considered).toBe(TIE_LEDGER.considered);
+      // 差异恰好 = 5 条 sector 各 60px 宽 × 1 行 = 300 ⇒ exact = 900 − 300 = 600。
+      // 这条比旧版的 `diffCount > 0` 更紧：它钉死了**分歧的像素量级**（恰好 1 行），
+      // 而不只是「存在差异」。
+      expect(ledger.exact).toBe(TIE_LEDGER.exact);
+      expect(ledger.considered - ledger.exact).toBe(5 * 60);
+      // 下面两条是**构造性事实**，不是放水：同一个渲染器（librsvg）产出两台只差 1px 平移的
+      // 图像时，金样本每格的颜色必定还能在我的 3×3 邻域里找到 ⇒ 1px 容差把差异全额吸收
+      // （within1px = 全部 900）。旧版金样本版能看到 `diffCount > 0`，靠的是 Pillow 与
+      // librsvg 的**抗锯齿差异**，不是位移本身 —— 所以那台账本随真实样本里的平局一起消失后，
+      // 这里记录的就是「平局分歧的像素代价 = 恰好 1px、且恰好落在容差内」。
+      expect(ledger.within1px).toBe(TIE_LEDGER.within1px);
+      expect(ledger.diffCount).toBe(TIE_LEDGER.diffCount);
       expect(ledger.innerDiff, '平局带里出现了内部差，说明不是边缘位移').toBe(0);
       expect(ledger.edgeDiff).toBe(ledger.diffCount);
-    },
-  );
+      expect(ledger.within1Pct).toBe(100);
+      expect(ledger.edgeShareOfDiffPct).toBe(100);
+    }
+
+    // ── (4) 事实记账：PR-B 这批样本里「分歧平局」已经不存在了 ──
+    //
+    // 这不是为了判对错，而是把当前样本的事实记在案：组 4 之所以改成合成 doc，
+    // 正是因为这里扫出来 0 条分歧。哪天 Python 几何再变、样本里又冒出分歧平局，
+    // 这里会红，提醒把组 4 的金样本版一并恢复。
+    // （`out/` 被 gitignore，fresh clone 上没有样本 ⇒ 与其它金样本用例同为条件执行。）
+    //
+    // 措辞澄清：任务书原话是「样本里不再存在平局」，实测更准确的说法是
+    // **平局还在（36 条，不是空扫）但分歧平局为 0** —— 36 条全是
+    // `heat_age/{center,sector_1..5}.x_in = 97.5`（half-to-even 与 Math.round 同值 98）。
+    // 旧样本里那条 `heat_age/{sector_1..5,legend_1..5}.y_in = 1.825`（分歧 182/183）
+    // 随卡片等比缩放 + 居中留白一起消失了。
+    if (HAS_GOLDEN) {
+      const all = [];
+      for (const sample of SAMPLES) {
+        for (const entry of tieBands(sample.doc)) all.push({ sample: sample.name, ...entry });
+      }
+      const divergent = all.filter((entry) => entry.pyRound !== entry.mathRound);
+      console.log(
+        `  [平局事实] 11 份样本共 ${all.length} 条 .5 平局，分歧 ${divergent.length} 条`
+        + (all.length ? `；分布：${[...new Set(all.map((e) => `${e.sample}/${e.id}.${e.axis}=${e.px}`))].join(', ')}` : ''),
+      );
+      expect(all.length).toBe(36);
+      expect(all.every((entry) => entry.pyRound === entry.mathRound)).toBe(true);
+      expect(divergent).toEqual([]);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -854,7 +1045,10 @@ describe.skipIf(!HAS_GOLDEN)('金样本：任务书三个口径的数字', () =>
           .concat(complementBoxes(pageGold.width, pageGold.height, regions)),
       });
       console.log(`  整页卡片区域: ${fmt(regionResult)}`);
-      expect(regionResult.considered).toBe(356810);
+      // PR-B 后卡片外框变小、并在格子里居中：卡区矩形由 [[40,239,647,576],[40,667,647,1164]]
+      // 变为 [[100,239,587,594],[96,688,591,1184]]，区域面积 506238 → 418405，
+      // 减去文字掩膜后 considered 由 356810 变 315355（两条都逐像素复算过）。
+      expect(regionResult.considered).toBe(315355);
       expect(regionResult.within1Pct).toBeGreaterThanOrEqual(MIN_WITHIN_1PX_PCT);
       // 同主判据页区口径：钉住真有差异，避免早退把「描边差 ≥60%」变成不可 falsify。
       expect(

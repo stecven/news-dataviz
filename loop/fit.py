@@ -239,14 +239,12 @@ def text_floors(template, font_scale: float) -> dict:
 
 
 def _load_font(role: str, font_scale: float):
-    from PIL import ImageFont
-    from loop.preview import _FONT_PATH
+    from loop import fonts
     px = max(1, int(round(palette.scaled_font_size(role, font_scale)
                            * PX_PER_IN / 72.0)))
-    try:
-        return ImageFont.truetype(_FONT_PATH, px)
-    except (OSError, FileNotFoundError):
-        return ImageFont.load_default()
+    # 字体不可用时 fonts.load_font 直接抛 FontUnavailable —— 折行量宽依赖字体，
+    # 退回默认位图字体会算出一套不同的折行（用户 m07216 任务 3）。
+    return fonts.load_font(px)
 
 
 # ---------------------------------------------------------------------------

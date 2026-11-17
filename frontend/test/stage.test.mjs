@@ -25,6 +25,7 @@ import {
   ascentPx, lineHeightPx, pxFromPt, roundPx, truncPx,
 } from '../src/units.js';
 import { createTheme } from '../src/theme.js';
+import { requireArtifacts } from './helpers/golden.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -40,6 +41,14 @@ const AUTO = loadGolden('out/demo/auto_layout/pagelayout.json');
 const PLAIN = loadGolden('out/demo/auto_layout/_plain/pagelayout.json');
 const MULTICOL = loadGolden('out/demo/multicol/_spread/pagelayout.json');
 const ILLUSTRATED = loadGolden('out/demo/illustrated/pagelayout.json');
+
+// 严格模式（REQUIRE_ARTIFACTS=1，CI）：缺产物直接让本文件失败，而不是整组 skip。
+requireArtifacts([
+  'out/demo/auto_layout/pagelayout.json',
+  'out/demo/auto_layout/_plain/pagelayout.json',
+  'out/demo/multicol/_spread/pagelayout.json',
+  'out/demo/illustrated/pagelayout.json',
+]);
 
 const hosts = [];
 

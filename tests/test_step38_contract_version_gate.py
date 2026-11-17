@@ -163,7 +163,8 @@ class TestDeliveredArtifacts(unittest.TestCase):
 
     def setUp(self):
         if not os.path.isdir(cf.DEMO_ROOT):
-            self.skipTest("out/demo 未生成（fresh clone；先跑 scripts/build_*_demo.py）")
+            cf.skip_or_fail(self,
+                            "out/demo 未生成（fresh clone；先跑 scripts/build_*_demo.py）")
         self.paths = cf.demo_layout_paths()
         self.assertTrue(self.paths, "out/demo 存在时不该一份 pagelayout 都没有")
 

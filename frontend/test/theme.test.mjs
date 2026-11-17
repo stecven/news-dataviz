@@ -18,10 +18,14 @@ import {
   ROLE_ALIASES,
   createTheme,
 } from '../src/theme.js';
+import { requireArtifacts } from './helpers/golden.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SAMPLE = resolve(HERE, '../../out/demo/auto_layout/pagelayout.json');
 const HAS_SAMPLE = existsSync(SAMPLE);
+
+// 严格模式（REQUIRE_ARTIFACTS=1）：缺产物直接让本文件失败，而不是整组 skip。
+requireArtifacts(['out/demo/auto_layout/pagelayout.json']);
 
 /** 读真实样本里的 theme（不存在就返回 null，供 skipIf 用）。 */
 function sampleTheme() {

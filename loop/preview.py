@@ -4,14 +4,17 @@
 """
 import os
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from loop import palette
+from loop import fonts
 from loop.frame import BORDER_ROLE
 from loop.models import PageSpec
 
 PX_PER_IN = 100
-_FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
+#: 字体路径的唯一来源是 :mod:`loop.fonts`（用户 m07216 任务 3）。
+#: 保留 ``_FONT_PATH`` 这个名字只为兼容既有引用；新代码请用 ``fonts.font_path()``。
+_FONT_PATH = fonts.DEFAULT_FONT_PATH
 
 #: 元素描边色 / 文本色 / 兜底填充色，全部来自色板（m04549：颜色单一来源）。
 #: PNG 预览需要轮廓才能看清色块边界；PPTX 端形状靠填充区分，不描边。
@@ -30,10 +33,12 @@ _PX_PER_PT = PX_PER_IN / 72.0
 
 
 def _font(size=14):
-    try:
-        return ImageFont.truetype(_FONT_PATH, size)
-    except (OSError, FileNotFoundError):
-        return ImageFont.load_default()
+    """取字体；不可用时**明确报错**，不退回 ``ImageFont.load_default()``。
+
+    退回默认位图字体不会报错，但会改变折行宽度与卡片框（见 :mod:`loop.fonts`
+    的模块说明），等于悄悄换了一套几何。用户 m07216 任务 3。
+    """
+    return fonts.load_font(size)
 
 
 def _render_order(spec: PageSpec) -> list:

@@ -1,0 +1,188 @@
+name: CI
+
+# 用户 m07216（PR-D）+ m07603（两项收尾决策）。这份流水线只为一件事存在：
+# 把「关键判据被静默跳过，流水线却报绿」变成不可能。
+#
+# 它做四件事：
+#   1. 先核对字体身份（SHA-256 对齐几何基线），拿不到就红 —— 换字体会换几何；
+#   2. 把测试要读的产物造出来（六个 demo 脚本 → out/demo/**）；
+#   3. 全程 REQUIRE_ARTIFACTS=1，让"缺产物"从 skip 变成 fail；
+#   4. 跑完测试后复查日志：Python 与 JS 都**一次跳过都不许有**。
+#
+# 任何一步失败即整个 job 失败 —— 全文没有 continue-on-error，也没有 `|| true`。
+
+on:
+  push:
+  pull_request:
+
+env:
+  # 严格模式：缺必需产物 → 测试失败（而不是跳过）。见 tests/contract_fixtures.py
+  # 的 skip_or_fail 与 frontend/test/helpers/golden.mjs 的 requireArtifacts。
+  REQUIRE_ARTIFACTS: "1"
+  PYTHONIOENCODING: "utf-8"
+  # 让 `python -m scripts.build_*_demo` 在仓库根就能 import 到 loop/。
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  test:
+    name: Python + JavaScript（严格产物模式）
+    # 几何基线是用微软雅黑（C:\Windows\Fonts\msyh.ttc）生成的。
+    # 用户 m07603 决策二：定在 windows-2025，并在下一步**实际核对**该 runner 的
+    # msyh.ttc 是否与基线逐字节一致；不一致就明确失败，不换字体、不重冻基线、
+    # 也不用 base64 secret 绕过分发授权（该字体不可再分发）。
+    runs-on: windows-2025
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 打印工具链版本
+        shell: pwsh
+        run: |
+          python -VV
+          node --version
+          npm --version
+
+      - name: 安装 Python 依赖（已钉版本）
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: 安装 JavaScript 依赖
+        working-directory: frontend
+        run: npm ci
+
+      # 字体是**构建依赖**，不是锦上添花：折行用 font.getlength() 量字宽，
+      # 换字体就是换几何（卡片框、行高、11 份基线指纹全变）。
+      #
+      # 用户 m07603 决策二：不把 msyh.ttc 入库、不用 base64 secret 搬运它（该字体
+      # 随 Windows 分发、不可再分发）；改为**核对 runner 自带的这一份**。核对三项：
+      # 文件存在 / Pillow 能真的打开 / SHA-256 等于几何基线所用的那份。
+      # 任一不过就红，且**不继续**后面的 demo 构建 —— 否则就会"顺手把 golden 重冻
+      # 成另一套几何"。runner 镜像里到底有没有匹配版本的雅黑，只能靠这里实测。
+      - name: 核对字体与几何基线一致
+        shell: pwsh
+        run: |
+          $default = 'C:\Windows\Fonts\msyh.ttc'
+          if (-not (Test-Path -LiteralPath $default)) {
+            # 不用 here-string：PowerShell 的 `"@` 必须顶格，而顶格会提前结束
+            # YAML 的 block scalar。用拼接的普通字符串最稳。
+            $msg = "runner 上没有几何基线所用的字体：$default" +
+                   "`n不允许静默改用 ImageFont.load_default()，也不允许换字体或重冻基线：" +
+                   "`n  * 请配置一台具备微软雅黑合法使用权的自托管 Windows runner；" +
+                   "`n  * 或者把字体放到某个路径并用 NEWSDATAVIZ_FONT_PATH 指过去（该文件必须与基线 sha256 一致）。" +
+                   "`n详见 docs/ci.md。"
+            throw $msg
+          }
+          $len = (Get-Item -LiteralPath $default).Length
+          $sha = (Get-FileHash -LiteralPath $default -Algorithm SHA256).Hash.ToLower()
+          Write-Host "字体路径 = $default"
+          Write-Host "字体长度 = $len 字节"
+          Write-Host "字体 sha256 = $sha"
+
+          # 用**钉住版本的 Pillow** 实际加载一次 + 与基线摘要比对。
+          # check_baseline_font() 同时负责"载不动"与"摘要不一致"两种失败。
+          $env:PYTHONPATH = $env:GITHUB_WORKSPACE
+          python -c "from loop import fonts; p, h = fonts.check_baseline_font(); print('check_baseline_font OK:', p, h)"
+          if ($LASTEXITCODE -ne 0) {
+            throw "字体与几何基线不一致（见上面的 FontUnavailable 报文）。已中止，未运行任何 demo 构建。"
+          }
+          Write-Host "字体已与几何基线逐字节核对通过。"
+
+      - name: 打印生效的字体路径
+        run: python -c "from loop import fonts; print('font_path =', fonts.font_path()); print('from_env =', fonts.loaded_from_env())"
+
+      # ---- 先造产物，再跑测试。顺序是这份流水线的全部意义所在。 ----
+      #
+      # 注意：这里**不**跑 `python -m loop.build_loop`。它写的 out/loop1/pagespec.json
+      # 是「旧版本留下的样本」（当前引擎跑出来的是 39 个元素，那三个用例断言的是 27），
+      # 而用户 m07603 决策一已经把那份 27 元素样本收进仓库夹具
+      # （tests/fixtures/legacy/loop1_pagespec.json），三个用例不再读 out/loop1/。
+      # 所以 CI 既不需要、也不应该去造它。
+
+      - name: 构建演示产物（六个脚本 → out/demo/**）
+        run: |
+          python -m scripts.build_auto_layout_demo
+          python -m scripts.build_illustrated_demo
+          python -m scripts.build_multicol_demo
+          python -m scripts.build_newspaper_demo
+          python -m scripts.build_page_demo
+          python -m scripts.build_theme_match_demo
+
+      - name: 检查产物是否真的落盘
+        shell: pwsh
+        run: |
+          $need = @(
+            'out\demo\auto_layout\pagelayout.json',
+            'out\demo\auto_layout\_plain\pagelayout.json',
+            'out\demo\illustrated\pagelayout.json',
+            'out\demo\illustrated\_no_asset\pagelayout.json',
+            'out\demo\illustrated\_spread\pagelayout.json',
+            'out\demo\multicol\pagelayout.json',
+            'out\demo\multicol\_spread\pagelayout.json',
+            'out\demo\paper\pagelayout.json',
+            'out\demo\page\pagelayout.json',
+            'out\demo\theme_match\pagelayout.json',
+            'out\demo\theme_match\_no_theme\pagelayout.json'
+          )
+          $missing = @($need | Where-Object { -not (Test-Path $_) })
+          if ($missing.Count -gt 0) {
+            throw "构建后仍缺产物：`n  $($missing -join "`n  ")"
+          }
+          Write-Host "11 份演示产物全部就位。"
+
+      # ---- 测试：Python 与 JS 都要跑；被跳过也不放过。 ----
+
+      - name: Python 全量测试（严格模式）
+        shell: pwsh
+        run: |
+          # -v 是为了让「谁被跳过了」出现在日志里（默认 verbosity 只报数量）。
+          # 用 cmd /c 重定向，避免 PowerShell 把 Pillow 的 DeprecationWarning
+          # 当成 NativeCommandError 而污染退出码。
+          cmd /c "python -m unittest discover -s tests -t . -v > py-tests.log 2>&1"
+          $code = $LASTEXITCODE
+          Get-Content py-tests.log -Tail 40
+          if ($code -ne 0) { throw "Python 测试失败（exit $code）" }
+
+          # 用户 m07603 决策一之后，跳过白名单**已经删掉**：三个「老样本回读」
+          # 用例改成读入库夹具 tests/fixtures/legacy/loop1_pagespec.json，不再依赖
+          # out/loop1/。所以这里要求的是零跳过 —— 少一条判据就不算跑过。
+          $skips = @(Select-String -Path py-tests.log -Pattern '\.\.\. skipped')
+          if ($skips.Count -ne 0) {
+            $names = ($skips | ForEach-Object { $_.Line.Trim() }) -join "`n  "
+            throw "Python 有 $($skips.Count) 条用例被跳过，严格模式下不允许：`n  $names"
+          }
+          Write-Host "Python：全部执行，零跳过。"
+
+      - name: JavaScript 全量测试（严格模式）
+        shell: pwsh
+        working-directory: frontend
+        run: |
+          cmd /c "npm test > js-tests.log 2>&1"
+          $code = $LASTEXITCODE
+          Get-Content js-tests.log -Tail 40
+          if ($code -ne 0) { throw "JavaScript 测试失败（exit $code）" }
+          if (Select-String -Path js-tests.log -Pattern '\d+ skipped' -Quiet) {
+            throw "JavaScript 测试报告了 skipped：严格模式下关键 golden 判据不许被跳过。"
+          }
+          Write-Host "JavaScript：全部执行，零跳过。"
+
+      - name: 测试日志（失败时也保留）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          path: |
+            py-tests.log
+            frontend/js-tests.log
+          if-no-files-found: warn

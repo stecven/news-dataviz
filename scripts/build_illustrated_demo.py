@@ -109,8 +109,10 @@ def _spread_page():
 
 
 def _label(draw, xy, text):
-    from PIL import ImageFont
-    font = ImageFont.truetype("C:/Windows/Fonts/msyh.ttc", 26)
+    from loop import fonts
+    # 字体统一走 loop.fonts（用户 m07216 任务 3）：路径不再在这里写死，
+    # 缺字体时明确报错而不是静默用默认位图字体。
+    font = fonts.load_font(26)
     draw.rectangle([xy[0] - 6, xy[1] - 4, xy[0] + 26 * len(text), xy[1] + 34],
                    fill=(255, 255, 255))
     draw.text(xy, text, fill=(40, 40, 40), font=font)

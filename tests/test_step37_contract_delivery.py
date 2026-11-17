@@ -20,8 +20,9 @@
 2. 第二条要断言**盘上字节**而不只是 ``dump_layout`` 的返回值：返回值只证明
    「写出侧有能力补两键」（Task 4 / Task 6 已各自钉过），证明不了「生产路径
    真的走了它」。``out/demo`` 是 gitignore 的，fresh clone 上没有 —— 三个用例
-   在目录缺失时 ``skipTest``，与 ``tests/test_step31_contract_fixtures.py`` 同
-   口径（那边断的也是 ``out/demo`` 的盘上字节）。
+   在目录缺失时走 ``cf.skip_or_fail``：普通模式跳过，``REQUIRE_ARTIFACTS=1``
+   （CI）则**失败**，与 ``tests/test_step31_contract_fixtures.py`` 同口径
+   （那边断的也是 ``out/demo`` 的盘上字节）。
 
 ``EXPECTED_MIN_TESTS`` 是**全量**基线（719 + 本文件 3 个 method = 722），记在
 这里供交付报告核对；``EXPECTED_CONTRACT_VERSION`` 则被下面的断言直接使用。
@@ -51,7 +52,8 @@ class TestContractDelivery(unittest.TestCase):
 
     def setUp(self):
         if not os.path.isdir(cf.DEMO_ROOT):
-            self.skipTest("out/demo 未生成（fresh clone；先跑 scripts/build_*_demo.py）")
+            cf.skip_or_fail(self,
+                            "out/demo 未生成（fresh clone；先跑 scripts/build_*_demo.py）")
         self.paths = cf.demo_layout_paths()
         self.assertTrue(self.paths, "out/demo 存在时不该一份 pagelayout 都没有")
 

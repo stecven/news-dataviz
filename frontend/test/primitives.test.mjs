@@ -29,6 +29,7 @@ import { createTheme } from '../src/theme.js';
 import {
   ascentPx, boxPxTrunc, lineHeightPx, pxFromIn, pxFromPt, truncPx,
 } from '../src/units.js';
+import { requireArtifacts } from './helpers/golden.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SAMPLE = resolve(HERE, '../../out/demo/auto_layout/pagelayout.json');
@@ -41,6 +42,12 @@ const PAGE = HAS_SAMPLE ? JSON.parse(readFileSync(SAMPLE, 'utf8')) : null;
 const PAGE_SAMPLE = resolve(HERE, '../../out/demo/page/pagelayout.json');
 const HAS_PAGE_SAMPLE = existsSync(PAGE_SAMPLE);
 const PAGE_SAMPLE_DOC = HAS_PAGE_SAMPLE ? JSON.parse(readFileSync(PAGE_SAMPLE, 'utf8')) : null;
+
+// 严格模式（REQUIRE_ARTIFACTS=1，CI）：缺产物直接让本文件失败，而不是整组 skip。
+requireArtifacts([
+  'out/demo/auto_layout/pagelayout.json',
+  'out/demo/page/pagelayout.json',
+]);
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 

@@ -214,12 +214,13 @@ class TestBackwardCompatible(unittest.TestCase):
         self.assertAlmostEqual(sector.geometry["R"], 2.05, places=6)
 
     def test_legacy_pagespec_still_reads_and_renders(self):
+        # 用户 m07603 决策一：样本改成读入库夹具（``cf.LEGACY_LOOP1_PAGESPEC``），
+        # 不再看 ``out/loop1/``，于是干净检出上这条也会真跑而不是跳过。
         from loop.build_loop import render_from_spec
         from loop.models import PageSpec
+        from tests import contract_fixtures as cf
         from tests.scratch import mkdtemp
-        path = os.path.join("out", "loop1", "pagespec.json")
-        if not os.path.exists(path):
-            self.skipTest("老产物不在仓库里")
+        path = cf.LEGACY_LOOP1_PAGESPEC
         with open(path, encoding="utf-8") as f:
             spec = PageSpec.from_dict(json.load(f))
         self.assertEqual(len(spec.elements), 27)

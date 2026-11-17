@@ -1,0 +1,24 @@
+# news-dataviz 的 Python 依赖（用户 m07216 任务 3：固定依赖）。
+#
+# 为什么全钉死、而不是只钉 Pillow：
+#
+# * `Pillow` 负责两件影响**几何**的事 —— 折行时用 `font.getlength()` 量字宽
+#   （`loop/fit.py::_wrap_lines`），预览出图时又用同一字体画字
+#   （`loop/preview.py::_draw_text`）。字体文件一样、FreeType 版本不一样，
+#   字形宽度就可能差一点点，折行点跟着变，卡片框与 `legacy_fingerprints.json`
+#   里那 11 份基线指纹就会漂。
+# * `python-pptx`（连同 `lxml`）决定 PPTX 的 XML 序列化与 ZIP 写入，
+#   影响产物字节。
+# * `XlsxWriter` / `typing_extensions` 是 python-pptx 的传递依赖，一并钉住，
+#   免得"锁了直接依赖、放开了传递依赖"。
+#
+# 安装（CI 与本地同一条命令）：
+#     python -m pip install -r requirements.txt
+#
+# 注意：**字体不在 PyPI 上**，也不是 pip 能解决的问题。几何基线用的微软雅黑
+# 随 Windows 分发、不可再分发，获取方式见 `docs/ci.md`。
+Pillow==13.0.0
+python-pptx==1.0.2
+lxml==6.1.3
+XlsxWriter==3.3.1
+typing_extensions==4.16.0

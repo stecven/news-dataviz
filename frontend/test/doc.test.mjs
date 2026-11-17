@@ -9,14 +9,14 @@
 // 夹具：
 //   * `tests/fixtures/contract/legacy/_plain.pagelayout.json`（入库，永远在）
 //   * `tests/fixtures/contract/legacy/auto_layout.pagelayout.json`（入库，永远在）
-//   * `out/demo/auto_layout/pagelayout.json`（1.0 样本，fresh clone 里没有 → skip）
+//   * `out/demo/auto_layout/pagelayout.json`（1.1 样本，fresh clone 里没有 → skip）
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { ContractError, assertDoc, normalizeDoc } from '../src/doc.js';
+import { ContractError, assertDoc, contractCapability, normalizeDoc } from '../src/doc.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../..');
@@ -38,11 +38,11 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-describe('doc: 宽松读 1.0 样本', () => {
-  it.skipIf(!HAS_DEMO)('reads_version_1_0_without_warnings', () => {
+describe('doc: 宽松读 1.1 样本', () => {
+  it.skipIf(!HAS_DEMO)('reads_version_1_1_without_warnings', () => {
     const { doc, warnings } = normalizeDoc(readJson(DEMO_10));
     expect(warnings).toEqual([]);
-    expect(doc.version).toBe('1.0');
+    expect(doc.version).toBe('1.1');
   });
 
   it.skipIf(!HAS_DEMO)('keeps_all_twelve_top_level_keys', () => {
@@ -98,7 +98,7 @@ describe('doc: 宽松读 0.x 老样本', () => {
 });
 
 /**
- * 一份**最小但合法**的 1.0 图纸：`assertDoc` 必须一次通过。
+ * 一份**最小但合法**的 1.1 图纸：`assertDoc` 必须一次通过。
  *
  * 这几条“把某处改坏”的用例要的是**区分力**——改坏前必须绿、改坏后必须红。
  * 用 `out/demo/` 的真样本最贴近现实，但它不入库（`.gitignore` 里有 `out/`），
@@ -111,7 +111,7 @@ describe('doc: 宽松读 0.x 老样本', () => {
  */
 function minimalValidDoc() {
   return {
-    version: '1.0',
+    version: '1.1',
     theme: { palette: { primary: 'C01F2A' }, font_sizes: { body: 11 } },
     width_in: 10,
     height_in: 6,
@@ -229,8 +229,8 @@ describe('doc: 严格校验', () => {
     expect(hit.message).toContain('expected number');
   });
 
-  it.skipIf(!HAS_DEMO)('assert_doc_passes_a_real_1_0_document', () => {
-    // 真实 1.0 样本必须一次通过 —— 否则渲染库“读得进但校验不过”，那才是灾难。
+  it.skipIf(!HAS_DEMO)('assert_doc_passes_a_real_1_1_document', () => {
+    // 真实 1.1 样本必须一次通过 —— 否则渲染库“读得进但校验不过”，那才是灾难。
     expect(() => assertDoc(readJson(DEMO_10))).not.toThrow();
   });
 
@@ -257,6 +257,48 @@ describe('doc: 严格校验', () => {
     const bad = clone(readJson(DEMO_10));
     bad.cards = 'not-an-array';
     expect(() => assertDoc(bad)).toThrow(/\$\.cards/);
+  });
+});
+
+describe('doc: 契约版本闸门（D9 / P3 方案 §5 兼容矩阵）', () => {
+  it('contract_capability_maps_every_case', () => {
+    // 判定点只有这一个函数，四种能力各钉一条，P3 的编辑/导出闸门照它开关。
+    expect(contractCapability('1.1')).toBe('current');
+    expect(contractCapability('1.0')).toBe('preview-only');
+    expect(contractCapability('1.2')).toBe('preview-only');
+    expect(contractCapability(null)).toBe('legacy');
+    expect(contractCapability(undefined)).toBe('legacy');
+    expect(contractCapability('2.0')).toBe('unsupported');
+    // 前缀比较不是「看起来像 1」就算数：'10.0' 的主版本是 '10'。
+    expect(contractCapability('10.0')).toBe('unsupported');
+  });
+
+  it('assert_doc_accepts_the_older_1_0_geometry', () => {
+    // 1.0 是 P1/P2 时代的老几何：读得进来、校验得过、预览得了，
+    // 只是 P3 不许在它上面编辑导出（那是 contractCapability 的事）。
+    const old = minimalValidDoc();
+    old.version = '1.0';
+    expect(() => assertDoc(old)).not.toThrow();
+  });
+
+  it('assert_doc_rejects_an_unknown_major_version', () => {
+    const bad = minimalValidDoc();
+    bad.version = '2.0';
+    const err = collectErrors(bad);
+    expect(err).toBeInstanceOf(ContractError);
+    const hit = err.errors.find((e) => e.path === '$.version');
+    expect(hit, `errors=${JSON.stringify(err.errors)}`).toBeTruthy();
+    expect(hit.message).toContain('unsupported major version');
+    expect(hit.message).toContain('2.0');
+  });
+
+  it('normalize_doc_warns_loudly_but_does_not_throw_on_an_unknown_major', () => {
+    // 宽松读这一层的契约是「不抛」：它只把话说重，硬闸留给 assertDoc。
+    const raw = minimalValidDoc();
+    raw.version = '2.0';
+    const { doc, warnings } = normalizeDoc(raw);
+    expect(doc.version).toBe('2.0');   // 如实反映，不改写、不伪造
+    expect(warnings.some((w) => w.includes('主版本不认识'))).toBe(true);
   });
 });
 

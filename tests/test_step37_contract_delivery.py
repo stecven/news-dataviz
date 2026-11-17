@@ -4,7 +4,7 @@
 
 * 几何逐份与基线一致（Step 3 重新生成之后才有意义）
                      → ``test_every_demo_layout_regenerates_geometrically_identical``
-* 重新生成后的文档过严格 schema、``version == "1.0"``、``theme`` 非空，
+* 重新生成后的文档过严格 schema、``version == "1.1"``、``theme`` 非空，
   **并且盘上文件的原始字节就带着这两样**（Step 0 落盘接线的判据）
                      → ``test_regenerated_documents_are_contract_conformant``
 * 卡片内每个 text 元素重新生成后仍带非空 ``lines`` 与正数 ``font_pt``
@@ -37,8 +37,8 @@ from tests import contract_fixtures as cf
 #: 全量基线：Task 6 关闭时 719，加本文件 3 个 test method = 722。
 EXPECTED_MIN_TESTS = 722
 
-#: 1.0 契约版本（``loop.contract.CONTRACT_VERSION`` 的字面值，独立钉一份）。
-EXPECTED_CONTRACT_VERSION = "1.0"
+#: 1.1 契约版本（``loop.contract.CONTRACT_VERSION`` 的字面值，独立钉一份）。
+EXPECTED_CONTRACT_VERSION = "1.1"
 
 
 def _load_disk(rel: str) -> dict:

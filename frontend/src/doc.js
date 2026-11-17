@@ -14,7 +14,7 @@
 // 不解释 `$ref` / `minimum` / `additionalProperties`）。理由是 v1 的校验需求
 // 就这么小：一个契约、一个消费端，把 schema 求值器搬进浏览器只会多一处两边
 // 行为不一致的地方（写出一侧仍由 Python 的 `validate_doc` 把关）。
-import { CONTRACT_VERSION } from './version.js';
+import { CONTRACT_MAJOR, CONTRACT_VERSION, SUPPORTED_VERSIONS } from './version.js';
 
 /** 结构不符时抛的错误。`errors` 是 `[{path, message}]`，与 Python 同形。 */
 export class ContractError extends Error {
@@ -26,6 +26,29 @@ export class ContractError extends Error {
     this.name = 'ContractError';
     this.errors = errors;
   }
+}
+
+/** 版本号的主版本（点号前那一段）。判不出（非字符串）就当不认识。 */
+function majorOf(version) {
+  return String(version).split('.', 1)[0];
+}
+
+/**
+ * 这份图纸的版本能拿来干什么 —— P3 方案 §5 兼容矩阵的**唯一**判定点。
+ *
+ *   * `'current'`      —— 本代码的当前版本：可读、可预览、可编辑、可导出
+ *   * `'preview-only'` —— 主版本相同但版本号不是当前值（含 `'1.0'` 老几何）：
+ *                          可读、可预览，**P3 编辑器不许在它上面编辑导出**
+ *   * `'legacy'`       —— 没有版本号（0.x 老样本）：同上，只读可预览
+ *   * `'unsupported'`  —— 主版本不认识：字段口径可能整体变过，明确报错
+ *
+ * @param {string|null|undefined} version
+ * @returns {'current'|'preview-only'|'legacy'|'unsupported'}
+ */
+export function contractCapability(version) {
+  if (version == null) return 'legacy';
+  if (majorOf(version) !== CONTRACT_MAJOR) return 'unsupported';
+  return version === CONTRACT_VERSION ? 'current' : 'preview-only';
 }
 
 /** 图元词汇表：7 + 1 个（spec §5.5）。 */
@@ -96,6 +119,15 @@ export function normalizeDoc(doc, opts = {}) {
   if (out.version == null) {
     warnings.push('$.version: 缺失，按 0.x 宽松读');
     out.version = null;
+  } else if (majorOf(out.version) !== CONTRACT_MAJOR) {
+    // 宽松读仍然不抛（这一层的契约就是「不抛」），但要把话说重：主版本不认识时
+    // 字段口径可能整体变过，画出来的东西不可信。硬闸在 assertDoc（D9）。
+    warnings.push(
+      `$.version: 读到 ${JSON.stringify(out.version)}，主版本不认识`
+      + `（本代码只支持 ${JSON.stringify(`${CONTRACT_MAJOR}.x`)}：`
+      + `${SUPPORTED_VERSIONS.join('、')}）；字段口径可能整体变过，`
+      + '渲染结果不可信，assertDoc 会拒绝',
+    );
   } else if (out.version !== expected) {
     warnings.push(`$.version: 读到 ${JSON.stringify(out.version)}，本代码是 ${JSON.stringify(expected)}`);
   }
@@ -172,6 +204,15 @@ export function assertDoc(doc) {
   // version 允许 null（0.x 老样本），但一旦有值必须是字符串。
   if (doc.version != null && typeof doc.version !== 'string') {
     errors.push({ path: '$.version', message: `expected string | null, got ${kind(doc.version)}` });
+  }
+  // 主版本硬闸（D9 / P3 方案 §5）：类型对了、主版本不认识也要拒绝——严格校验这一层
+  // 的职责就是「拿不准就别放行」，硬读出来的几何是错的。
+  if (typeof doc.version === 'string' && majorOf(doc.version) !== CONTRACT_MAJOR) {
+    errors.push({
+      path: '$.version',
+      message: `unsupported major version ${JSON.stringify(doc.version)}; `
+        + `this code supports ${CONTRACT_MAJOR}.x (${SUPPORTED_VERSIONS.join(', ')})`,
+    });
   }
   // theme 允许 null，但一旦有值必须是对象（渲染器拿它取色）。
   if (doc.theme != null && !isObject(doc.theme)) {

@@ -80,7 +80,7 @@ class TestNewDocumentsWriteStrictly(unittest.TestCase):
                 doc = dump_layout(load_layout(path).layout)
                 self.assertEqual(validate_doc(doc), [],
                                  f"{path} 写出后仍有 schema 违规")
-                self.assertEqual(doc["version"], "1.0")
+                self.assertEqual(doc["version"], "1.1")
                 self.assertEqual(doc["theme"], palette.summary())
 
 

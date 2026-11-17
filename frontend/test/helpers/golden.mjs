@@ -2,11 +2,14 @@
  * P2 Task 5 / V1 结构对拍：金样本（`out/demo/**`）的定位与加载。
  *
  * `out/` 被 `.gitignore` 忽略，fresh clone / CI 上这些文件**不存在**。所以本模块
- * 只做「有就读，没有就 `null`」，绝不抛；调用方据此 `describe.skipIf(...)`。
+ * 默认只做「有就读，没有就 `null`」（不抛），调用方据此 `describe.skipIf(...)`。
  *
  * **但整组 skip 会让 V1 结构对拍在 CI 上静默全绿**，所以测试文件里另有一条
  * 完全手写合成 doc 的判据（不依赖任何金样本），见 `v1-structure.test.mjs` 的
  * 「合成 doc」组。
+ *
+ * `REQUIRE_ARTIFACTS=1`（CI）时本模块改为**缺产物即抛**，见 `requireArtifacts`：
+ * 那样缺产物是红，不是绿。
  *
  * ---------------------------------------------------------------------------
  * 【维护必读】测试里那些写死的数字，是**针对某一代排版引擎产物**实测出来的字面量
@@ -46,6 +49,82 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(HERE, '..', '..', '..');
 
 /**
+ * 严格模式开关（用户 m07216 任务 2）。
+ *
+ * 本地/fresh clone 上 `out/` 不存在，条件跳过是合理的（不然新克隆一跑就红）。
+ * 但同一套跳过搬到 CI 上会变成「**关键判据没跑，流水线还是绿的**」：整文件跳的
+ * `primitives`/`stage`，以及 `v1-structure`/`v2-pixels` 的金样本组，正好是 V1 结构
+ * 对拍与 V2 像素对拍本身。所以 CI 设 `REQUIRE_ARTIFACTS=1`，让缺产物变成红。
+ */
+export const REQUIRE_ARTIFACTS = process.env.REQUIRE_ARTIFACTS === '1';
+
+/** `DEMO_LAYOUTS` 里当前工作区缺失的那些（相对仓库根）。 */
+export function missingArtifacts(relPaths = DEMO_LAYOUTS) {
+  return relPaths.filter((relPath) => !existsSync(goldenPath(relPath)));
+}
+
+/**
+ * 严格模式下要求这些产物**都存在**，缺一个就抛（带缺哪些文件的清单）。
+ *
+ * 普通模式是**空操作**。在测试文件模块作用域调用它（而不是放在 `it` 里）是有意
+ * 的：产物缺失时该文件直接收集失败、整个文件红，而不是被 `describe.skipIf` 整组
+ * 跳过；产物齐全时它什么也不做，`skipIf` 守卫照常为真。
+ *
+ * @param {string[]} relPaths 相对仓库根的产物路径
+ */
+export function requireArtifacts(relPaths) {
+  if (!REQUIRE_ARTIFACTS) return;
+  const missing = missingArtifacts(relPaths);
+  if (missing.length) {
+    throw new Error(
+      `REQUIRE_ARTIFACTS=1（严格模式）：必需产物缺失 ${missing.length} 个 —— `
+      + `${missing.join('、')}（先跑 scripts/build_*_demo.py）`,
+    );
+  }
+}
+
+/**
+ * V2 像素对拍除了图纸，还要每份图纸同目录下的 `preview.png`（Pillow 出的参考图）。
+ * 返回缺失的那些（相对仓库根）。
+ */
+export function missingPagePreviews() {
+  return DEMO_LAYOUTS
+    .map((relPath) => relPath.replace(/\/pagelayout\.json$/, '/preview.png'))
+    .filter((relPath) => !existsSync(goldenPath(relPath)));
+}
+
+/** 严格模式下要求 `preview.png` 齐；普通模式空操作。 */
+export function requirePagePreviews() {
+  if (!REQUIRE_ARTIFACTS) return;
+  const missing = missingPagePreviews();
+  if (missing.length) {
+    throw new Error(
+      `REQUIRE_ARTIFACTS=1（严格模式）：V2 像素对拍需要的参考图缺失 ${missing.length} 个 —— `
+      + `${missing.join('、')}（先跑 scripts/build_*_demo.py）`,
+    );
+  }
+}
+
+/**
+ * 严格模式下要求「中文能被光栅化」这条探针成立，否则抛。
+ *
+ * `v2-pixels.test.mjs` 的像素对拍依赖 sharp 能画出中文；画不出来时整组会 skip，
+ * 而"字都没画出来"正好会让对拍失去意义——所以严格模式必须红，不能跳。
+ *
+ * @param {boolean} ok 探针结果
+ * @param {string} detail 探针细节（写进错误信息）
+ */
+export function requireFontProbe(ok, detail) {
+  if (!REQUIRE_ARTIFACTS || ok) return;
+  throw new Error(
+    'REQUIRE_ARTIFACTS=1（严格模式）：sharp 渲染中文探针失败 —— '
+    + `${detail}。运行环境没有可用的中文字体，像素对拍会静默跳过；`
+    + '请先按 docs/ci.md 准备好与几何基线一致的字体。',
+  );
+}
+
+
+/**
  * 计划里点名的 11 份 demo 图纸（相对仓库根）。
  * 顺序即测试报告里的展示顺序；`demoLayoutPaths()` 会再排一次序。
  */
@@ -70,8 +149,16 @@ export function goldenPath(relPath) {
 
 /**
  * 读一份金样本。
+ *
+ * 文件不存在时返回 `null` —— 这是**不变的低层契约**（`v1-structure.test.mjs`
+ * 里有一条用例把它钉死：传一个绝对不存在的路径必须返回 null 而不是抛）。
+ * 严格模式（`REQUIRE_ARTIFACTS=1`）的"缺产物就红"不在这里实现，而是放在
+ * **模块作用域**的 `requireArtifacts([...])` 与 `demoLayoutPaths()` 里：
+ * 产物缺了，测试文件在收集阶段就失败，比让每个 `goldenDoc` 调用点各自抛更早、
+ * 也更不容易漏（漏掉一个调用点 = 一个静默 skip）。
+ *
  * @param {string} relPath 相对仓库根，例如 `out/demo/auto_layout/pagelayout.json`
- * @returns {object|null} 文件不存在时返回 `null`（不抛）
+ * @returns {object|null} 文件不存在时返回 `null`
  */
 export function goldenDoc(relPath) {
   const full = goldenPath(relPath);
@@ -81,10 +168,11 @@ export function goldenDoc(relPath) {
 
 /**
  * 当前工作区里真实存在的 demo 图纸路径（相对仓库根），按字典序排序。
- * 一份都不存在时返回 `[]`。
+ * 一份都不存在时返回 `[]`（严格模式下改成抛，见 `requireArtifacts`）。
  * @returns {string[]}
  */
 export function demoLayoutPaths() {
+  requireArtifacts(DEMO_LAYOUTS);
   return DEMO_LAYOUTS.filter((relPath) => existsSync(goldenPath(relPath))).sort();
 }
 

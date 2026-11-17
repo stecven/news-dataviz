@@ -9,7 +9,8 @@
 // 夹具：
 //   * `tests/fixtures/contract/legacy/_plain.pagelayout.json`（入库，永远在）
 //   * `tests/fixtures/contract/legacy/auto_layout.pagelayout.json`（入库，永远在）
-//   * `out/demo/auto_layout/pagelayout.json`（1.1 样本，fresh clone 里没有 → skip）
+//   * `out/demo/auto_layout/pagelayout.json`（1.1 样本，fresh clone 里没有 → skip；
+//     `REQUIRE_ARTIFACTS=1` 时改为直接失败，见下面的 `requireArtifacts`）
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { ContractError, assertDoc, contractCapability, normalizeDoc } from '../src/doc.js';
+import { requireArtifacts } from './helpers/golden.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../..');
@@ -28,6 +30,9 @@ const LEGACY_AUTO = resolve(
 const DEMO_10 = resolve(REPO_ROOT, 'out/demo/auto_layout/pagelayout.json');
 
 const HAS_DEMO = existsSync(DEMO_10);
+
+// 严格模式（REQUIRE_ARTIFACTS=1）：缺产物直接让本文件失败，而不是整组 skip。
+requireArtifacts(['out/demo/auto_layout/pagelayout.json']);
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));

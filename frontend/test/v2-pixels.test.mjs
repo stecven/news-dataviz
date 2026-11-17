@@ -49,7 +49,7 @@ import {
   textMaskBoxes,
   toSvgString,
 } from './helpers/rasterize.mjs';
-import { REPO_ROOT, demoLayouts, goldenPath } from './helpers/golden.mjs';
+import { REPO_ROOT, demoLayouts, goldenPath, requireFontProbe, requirePagePreviews } from './helpers/golden.mjs';
 
 /** 主判据阈值：卡片级 / 整页卡片区域，1px 容差内 ≥ 98%。 */
 const MIN_WITHIN_1PX_PCT = 98;
@@ -277,6 +277,10 @@ const HAS_GOLDEN = SAMPLES.length > 0
   && SAMPLES.every((sample) => existsSync(goldenPath(pageGoldenPath(sample))))
   && SAMPLES.some(hasCardGoldens);
 
+// 严格模式（REQUIRE_ARTIFACTS=1，CI）：图纸由 `demoLayouts()` 内部保证；
+// 这里再要求每份图纸同目录的 `preview.png`（V2 的参考图）齐 —— 缺就红，不跳。
+requirePagePreviews();
+
 /**
  * 字形可用性探针：渲染一段中文，数深色像素。
  *
@@ -299,6 +303,10 @@ const FONT_PROBE = await (async () => {
   }
   return { dark, ok: dark > 0 };
 })();
+
+// 严格模式（REQUIRE_ARTIFACTS=1，CI）：探针失败时那些像素判据会 `skipIf` 掉，
+// 而"中文根本没画出来"正好让对拍失去意义 —— 所以这里必须红，不能跳。
+requireFontProbe(FONT_PROBE.ok, `中文字形深色像素 dark=${FONT_PROBE.dark}`);
 
 // ---------------------------------------------------------------------------
 // 口径工具：卡片区域 / 文字掩膜 / 差值账本

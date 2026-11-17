@@ -8,8 +8,9 @@
 * 盘上每份文档的指纹与基线逐字节一致             → ``test_fingerprint_matches_baseline_for_every_document``
 * 两份夹具可读、无版本号、结构如任务书所述         → ``test_legacy_fixture_documents_are_readable_json_and_versionless``
 
-读 ``out/demo`` 的用例在目录缺失（fresh clone）时 ``skipTest``；
-读已入库夹具的用例**不**跳过 —— 它是夹具本身的判据。
+读 ``out/demo`` 的用例在目录缺失（fresh clone）时走 ``cf.skip_or_fail``：
+普通模式跳过，``REQUIRE_ARTIFACTS=1``（CI）则**失败**——否则几何基线与交付判据
+会在流水线上整组静默通过。读已入库夹具的用例**不**跳过 —— 它是夹具本身的判据。
 """
 import copy
 import json
@@ -68,12 +69,12 @@ class TestLegacyGeometryFingerprints(unittest.TestCase):
 
     def test_baseline_covers_every_demo_layout(self):
         if not os.path.isdir(cf.DEMO_ROOT):
-            self.skipTest("out/demo 未生成")
+            cf.skip_or_fail(self, "out/demo 未生成（先跑 scripts/build_*_demo.py）")
         self.assertEqual(set(cf.load_baseline()), set(cf.demo_layout_paths()))
 
     def test_fingerprint_matches_baseline_for_every_document(self):
         if not os.path.isdir(cf.DEMO_ROOT):
-            self.skipTest("out/demo 未生成")
+            cf.skip_or_fail(self, "out/demo 未生成（先跑 scripts/build_*_demo.py）")
         baseline = cf.load_baseline()
         paths = cf.demo_layout_paths()
         self.assertTrue(paths, "out/demo 存在时不该一份 pagelayout 都没有")

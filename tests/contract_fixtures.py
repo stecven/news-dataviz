@@ -34,6 +34,28 @@ BASELINE_PATH: str = os.path.join(REPO_ROOT, "tests", "fixtures", "contract",
 #: 演示稿产物根目录（``out/`` 不入库，fresh clone 上不存在）。
 DEMO_ROOT: str = os.path.join(REPO_ROOT, "out", "demo")
 
+#: 严格模式开关（用户 m07216 任务 2）：``REQUIRE_ARTIFACTS=1`` 时，缺产物**失败**。
+REQUIRE_ARTIFACTS_ENV: str = "REQUIRE_ARTIFACTS"
+
+
+def require_artifacts() -> bool:
+    """当前是不是「缺产物就红」的严格模式。"""
+    return os.environ.get(REQUIRE_ARTIFACTS_ENV, "").strip() == "1"
+
+
+def skip_or_fail(case, reason: str) -> None:
+    """产物缺失时的统一处置：严格模式 → ``case.fail``，普通模式 → ``skipTest``。
+
+    普通模式的跳过是给 fresh clone 用的（``out/`` 被 gitignore）。但同一个跳过放
+    在 CI 上会让**几何基线、P1 交付判据、产物版本判据**整组静默通过、流水线仍报
+    绿——这正是用户 m07216 要堵的洞。所以 CI 设 ``REQUIRE_ARTIFACTS=1``，让缺产物
+    变成指名道姓的红。``case`` 是 ``unittest.TestCase`` 实例（鸭子类型，避免测试
+    工具模块反向依赖 ``unittest``）。
+    """
+    if require_artifacts():
+        case.fail(f"{REQUIRE_ARTIFACTS_ENV}=1（严格模式）：必需产物缺失 → {reason}")
+    case.skipTest(reason)
+
 
 def demo_layout_paths() -> list[str]:
     """``out/demo/**/pagelayout.json`` 的仓库根相对路径，排序后返回。
